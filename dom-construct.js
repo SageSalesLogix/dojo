@@ -1,4 +1,4 @@
-define(["exports", "./_base/kernel", "./_base/sniff", "./_base/window", "./dom", "./dom-attr", "./on"],
+define(["exports", "./_base/kernel", "./sniff", "./_base/window", "./dom", "./dom-attr", "./on"],
 		function(exports, dojo, has, win, dom, attr, on){
 	// module:
 	//		dojo/dom-construct
@@ -249,11 +249,9 @@ define(["exports", "./_base/kernel", "./_base/sniff", "./_base/window", "./dom",
 
 	var _destroyContainer = null,
 		_destroyDoc;
-	//>>excludeStart("webkitMobile", kwArgs.webkitMobile);
 	on(window, "unload", function(){
 		_destroyContainer = null; //prevent IE leak
 	});
-	//>>excludeEnd("webkitMobile");
 
 	exports.toDom = function toDom(frag, doc){
 		doc = doc || win.doc;
@@ -349,14 +347,12 @@ define(["exports", "./_base/kernel", "./_base/sniff", "./_base/window", "./dom",
 	};
 
 	exports.empty =
-		//>>excludeStart("webkitMobile", kwArgs.webkitMobile);
 		has("ie") ? function(node){
 			node = dom.byId(node);
 			for(var c; c = node.lastChild;){ // intentional assignment
 				exports.destroy(c);
 			}
 		} :
-		//>>excludeEnd("webkitMobile");
 		function(node){
 			dom.byId(node).innerHTML = "";
 		};

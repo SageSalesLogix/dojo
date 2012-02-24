@@ -132,7 +132,7 @@
 		element = doc && doc.createElement("DiV"),
 
 		has = req.has = function(name){
-			return hasCache[name] = isFunction(hasCache[name]) ? hasCache[name](global, doc, element) : hasCache[name];
+			return isFunction(hasCache[name]) ? (hasCache[name] = hasCache[name](global, doc, element)) : hasCache[name];
 		},
 
 		hasCache = has.cache = defaultConfig.hasCache;
@@ -142,7 +142,9 @@
 		return now && has(name);
 	};
 
-	has.add("host-node", typeof process == "object" && /node(\.exe)?$/.test(process.execPath));
+	has.add("host-node", userConfig.has && "host-node" in userConfig.has ?
+		userConfig.has["host-node"] :
+		(typeof process == "object" && process.versions && process.versions.node && process.versions.v8));
 	if(has("host-node")){
 		// fixup the default config for node.js environment
 		require("./_base/configNode.js").config(defaultConfig);
@@ -150,7 +152,9 @@
 		defaultConfig.loaderPatch.nodeRequire = require;
 	}
 
-	has.add("host-rhino", typeof load == "function" && (typeof Packages == "function" || typeof Packages == "object"));
+	has.add("host-rhino", userConfig.has && "host-rhino" in userConfig.has ?
+		userConfig.has["host-rhino"] :
+		(typeof load == "function" && (typeof Packages == "function" || typeof Packages == "object")));
 	if(has("host-rhino")){
 		// owing to rhino's lame feature that hides the source of the script, give the user a way to specify the baseUrl...
 		for(var baseUrl = userConfig.baseUrl || ".", arg, rhinoArgs = this.arguments, i = 0; i < rhinoArgs.length;){
@@ -232,10 +236,7 @@
 		};
 
 		if(has("dom")){
-			// in legacy sync mode, the loader needs a minimal XHR library to load dojo/_base/loader and ojo/_base/xhr;
-			// when dojo/_base/loader pushes the sync loader machinery into the loader (via initSyncLoader), getText is
-			// replaced by dojo.getXhr() which allows for both sync and async op(and other features. It is not a problem
-			// depending on dojo for the sync loader since the sync loader will never be used without dojo.
+			// in legacy sync mode, the loader needs a minimal XHR library to load dojo/_base/loader and dojo/_base/xhr
 
 			var locationProtocol = location.protocol,
 				locationHost = location.host,
@@ -307,7 +308,7 @@
 	//
 	var eval_ =
 		// use the function constructor so our eval is scoped close to (but not in) in the global space with minimal pollution
-		new Function("__text", 'return eval(__text);');
+		new Function('return eval(arguments[0]);');
 
 	req.eval =
 		function(text, hint){
@@ -509,6 +510,7 @@
 						// "legacyAsync" => permanently in "xd" by choice
 						// "debugAtAllCosts" => trying to load everything via script injection (not implemented)
 						// otherwise, must be truthy => AMD
+						// legacyMode: sync | legacyAsync | xd | false
 						var mode = config[p];
 						req.legacyMode = legacyMode = (isString(mode) && /sync|legacyAsync/.test(mode) ? mode : (!mode ? "sync" : false));
 						req.async = !legacyMode;
@@ -576,11 +578,11 @@
 		// execute the various sniffs
 		//
 
-		if(has("dojo-sniff")){
-			for(var src, match, scripts = doc.getElementsByTagName("script"), i = 0; i < scripts.length && !match; i++){
+		if(has("dojo-cdn") || has("dojo-sniff")){
+			for(var dojoDir, src, match, scripts = doc.getElementsByTagName("script"), i = 0; i < scripts.length && !match; i++){
 				if((src = scripts[i].getAttribute("src")) && (match = src.match(/(.*)\/?dojo\.js(\W|$)/i))){
 					// if baseUrl wasn't explicitly set, set it here to the dojo directory; this is the 1.6- behavior
-					userConfig.baseUrl = userConfig.baseUrl || defaultConfig.baseUrl || match[1];
+					userConfig.baseUrl = dojoDir = userConfig.baseUrl || defaultConfig.baseUrl || match[1];
 
 					// see if there's a dojo configuration stuffed into the node
 					src = (scripts[i].getAttribute("data-dojo-config") || scripts[i].getAttribute("djConfig"));
@@ -612,6 +614,13 @@
 		config(defaultConfig, 1);
 		config(userConfig, 1);
 		config(dojoSniffConfig, 1);
+
+		if(has("dojo-cdn")){
+			packs.dojo.location = dojoDir;
+			packs.dijit.location = dojoDir + "../dijit/";
+			packs.dojox.location = dojoDir + "../dojox/";
+		}
+
 	}else{
 		// no config API, assume defaultConfig has everything the loader needs...for the entire lifetime of the application
 		paths = defaultConfig.paths;
@@ -682,43 +691,46 @@
 			}
 			if(isArray(a1)){
 				// signature is (requestList [,callback])
+				if(!a1.length){
+					a2 && a2();
+				}else{
+					syntheticMid = "require*" + uid();
 
-				syntheticMid = "require*" + uid();
-
-				// resolve the request list with respect to the reference module
-				for(var mid, deps = [], i = 0; i < a1.length;){
-					mid = a1[i++];
-					if(mid in {exports:1, module:1}){
-						throw makeError("illegalModuleId", mid);
+					// resolve the request list with respect to the reference module
+					for(var mid, deps = [], i = 0; i < a1.length;){
+						mid = a1[i++];
+						if(mid in {exports:1, module:1}){
+							throw makeError("illegalModuleId", mid);
+						}
+						deps.push(getModule(mid, referenceModule));
 					}
-					deps.push(getModule(mid, referenceModule));
+
+					// construct a synthetic module to control execution of the requestList, and, optionally, callback
+					module = mix(makeModuleInfo("", syntheticMid, 0, ""), {
+						injected: arrived,
+						deps: deps,
+						def: a2 || noop,
+						require: referenceModule ? referenceModule.require : req
+					});
+					modules[module.mid] = module;
+
+					// checkComplete!=0 holds the idle signal; we're not idle if we're injecting dependencies
+					injectDependencies(module);
+
+					// try to immediately execute
+					// if already traversing a factory tree, then strict causes circular dependency to abort the execution; maybe
+					// it's possible to execute this require later after the current traversal completes and avoid the circular dependency.
+					// ...but *always* insist on immediate in synch mode
+					var strict = checkCompleteGuard && req.async;
+					checkCompleteGuard++;
+					execModule(module, strict);
+					checkIdle();
+					if(!module.executed){
+						// some deps weren't on board or circular dependency detected and strict; therefore, push into the execQ
+						execQ.push(module);
+					}
+					checkComplete();
 				}
-
-				// construct a synthetic module to control execution of the requestList, and, optionally, callback
-				module = mix(makeModuleInfo("", syntheticMid, 0, ""), {
-					injected: arrived,
-					deps: deps,
-					def: a2 || noop,
-					require: referenceModule ? referenceModule.require : req
-				});
-				modules[module.mid] = module;
-
-				// checkComplete!=0 holds the idle signal; we're not idle if we're injecting dependencies
-				injectDependencies(module);
-
-				// try to immediately execute
-				// if already traversing a factory tree, then strict causes circular dependency to abort the execution; maybe
-				// it's possible to execute this require later after the current traversal completes and avoid the circular dependency.
-				// ...but *always* insist on immediate in synch mode
-				var strict = checkCompleteGuard && req.async;
-				checkCompleteGuard++;
-				execModule(module, strict);
-				checkIdle();
-				if(!module.executed){
-					// some deps weren't on board or circular dependency detected and strict; therefore, push into the execQ
-					execQ.push(module);
-				}
-				checkComplete();
 			}
 			return contextRequire;
 		},
@@ -1176,6 +1188,10 @@
 	}
 
 	if(has("dojo-inject-api")){
+		if(has("dojo-loader-eval-hint-url")===undefined){
+			has.add("dojo-loader-eval-hint-url", 1);
+		}
+
 		var fixupUrl= function(url){
 				url += ""; // make sure url is a Javascript string (some paths may be a Java string)
 				return url + (cacheBust ? ((/\?/.test(url) ? "&" : "?") + cacheBust) : "");
@@ -1238,7 +1254,7 @@
 						if(text===cached){
 							cached.call(null);
 						}else{
-							req.eval(text, module.mid);
+							req.eval(text, has("dojo-loader-eval-hint-url") ? module.url : module.mid);
 						}
 					}catch(e){
 						signal(error, makeError("evalModuleThrew", module));
@@ -1247,7 +1263,7 @@
 					if(text===cached){
 						cached.call(null);
 					}else{
-						req.eval(text, module.mid);
+						req.eval(text, has("dojo-loader-eval-hint-url") ? module.url : module.mid);
 					}
 				}
 				injectingCachedModule = 0;
@@ -1300,6 +1316,7 @@
 						// therefore, it must not have been a module; adjust state accordingly
 						setArrived(module);
 						mix(module, nonModuleProps);
+						req.trace("loader-define-nonmodule", [module.url]);
 					}
 
 					if(has("dojo-sync-loader") && legacyMode){
@@ -1320,13 +1337,13 @@
 				}
 				if(has("dojo-sync-loader") && legacyMode){
 					if(module.isXd){
-						// switch to async mode temporarily?
+						// switch to async mode temporarily; if current legacyMode!=sync, then is must be one of {legacyAsync, xd, false}
 						legacyMode==sync && (legacyMode = xd);
 						// fall through and load via script injection
 					}else if(module.isAmd && legacyMode!=sync){
 						// fall through and load via script injection
 					}else{
-						// mode may be sync, xd, or async; module may be AMD or legacy; but module is always located on the same domain
+						// mode may be sync, xd/legacyAsync, or async; module may be AMD or legacy; but module is always located on the same domain
 						var xhrCallback = function(text){
 							if(legacyMode==sync){
 								// the top of syncExecStack gives the current synchronously executing module; the loader needs
@@ -1483,10 +1500,12 @@
 
 		startTimer = function(){
 			clearTimer();
-			req.waitms && (timerId = setTimeout(function(){
-				clearTimer();
-				signal(error, makeError("timeout", waiting));
-			}, req.waitms));
+			if(req.waitms){
+				timerId = window.setTimeout(function(){
+					clearTimer();
+					signal(error, makeError("timeout", waiting));
+				}, req.waitms);
+			}
 		};
 	}
 
@@ -1533,11 +1552,18 @@
 						e = e || window.event;
 						var node = e.target || e.srcElement;
 						if(e.type === "load" || /complete|loaded/.test(node.readyState)){
-							disconnector();
+							loadDisconnector();
+							errorDisconnector();
 							callback && callback();
 						}
 					},
-					disconnector = domOn(node, "load", "onreadystatechange", onLoad);
+					loadDisconnector = domOn(node, "load", "onreadystatechange", onLoad),
+					errorDisconnector = domOn(node, "error", "onerror", function(e){
+						loadDisconnector();
+						errorDisconnector();
+						signal(error, makeError("scriptError", [url, e]));
+					});
+
 				node.type = "text/javascript";
 				node.charset = "utf-8";
 				node.src = url;
@@ -1671,7 +1697,7 @@
 				}
 			}
 			if(has("dojo-combo-api") && isArray(targetModule)){
-				injectDependencies(defineModule(targetModule.shift(), args[1], args[2]));
+				injectDependencies(defineModule(getModule(targetModule.shift()), args[1], args[2]));
 				if(!targetModule.length){
 					combosPending.splice(i, 1);
 				}
@@ -1765,7 +1791,7 @@
 
 	if(has("dojo-config-api")){
 		var bootDeps = defaultConfig.deps || userConfig.deps || dojoSniffConfig.deps,
-			bootCallback = defaultConfig.deps || userConfig.callback || dojoSniffConfig.callback;
+			bootCallback = defaultConfig.callback || userConfig.callback || dojoSniffConfig.callback;
 		req.boot = (bootDeps || bootCallback) ? [bootDeps || [], bootCallback] : 0;
 	}
 	if(!has("dojo-built")){
@@ -1833,9 +1859,11 @@
 			"loader-run-factory":0,
 			"loader-finish-exec":0,
 			"loader-define-module":0,
-			"loader-circular-dependency":0
+			"loader-circular-dependency":0,
+			"loader-define-nonmodule":0
 		},
-		async:0
+		async:0,
+		waitSeconds:15
 	}
 );
 //>>excludeEnd("replaceLoaderConfig")

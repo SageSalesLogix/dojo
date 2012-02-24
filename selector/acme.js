@@ -1,6 +1,6 @@
 define([
-	"../_base/kernel", "../dom", "../_base/sniff", "../_base/array", "../_base/lang", "../_base/window"
-], function(kernel, dom, has, array, lang, win){
+	"../dom", "../sniff", "../_base/array", "../_base/lang", "../_base/window"
+], function(dom, has, array, lang, win){
   //  module:
   //    dojo/selector/acme
   //  summary:
@@ -49,11 +49,6 @@ define([
 	// dojo.NodeList as the return instance instantiator
 	var trim = 			lang.trim;
 	var each = 			array.forEach;
-	// 					d.isIE; // float
-	// 					d.isSafari; // float
-	// 					d.isOpera; // float
-	// 					d.isWebKit; // float
-	// 					d.doc ; // document element
 
 	var getDoc = function(){ return win.doc; };
 	// NOTE(alex): the spec is idiotic. CSS queries should ALWAYS be case-sensitive, but nooooooo
@@ -311,6 +306,12 @@ define([
 							_cp.matchFor = cmf.slice(1, -1);
 						}
 					}
+					// remove backslash escapes from an attribute match, since DOM
+					// querying will get attribute values without backslashes
+					if(_cp.matchFor){
+						_cp.matchFor = _cp.matchFor.replace(/\\([\[\]])/g, "$1");
+					}
+
 					// end the attribute by adding it to the list of attributes.
 					currentPart.attrs.push(_cp);
 					_cp = null; // necessary?
@@ -446,7 +447,8 @@ define([
 			//		with the string "bar"
 			return function(elem){
 				var ea = " "+_getAttr(elem, attr);
-				return (ea.lastIndexOf(value)==(ea.length-value.length));
+				var lastIndex = ea.lastIndexOf(value);
+				return lastIndex > -1 && (lastIndex==(ea.length-value.length));
 			};
 		},
 		"~=": function(attr, value){
@@ -652,7 +654,7 @@ define([
 		}
 	};
 
-	var defaultGetter = (has("ie") && (has("ie") < 9 || kernel.isQuirks)) ? function(cond){
+	var defaultGetter = (has("ie") && (has("ie") < 9 || has("quirks"))) ? function(cond){
 		var clc = cond.toLowerCase();
 		if(clc == "class"){ cond = "className"; }
 		return function(elem){
@@ -801,15 +803,6 @@ define([
 			return ret;
 		};
 	};
-
-	/*
-	// thanks, Dean!
-	var itemIsAfterRoot = d.isIE ? function(item, root){
-		return (item.sourceIndex > root.sourceIndex);
-	} : function(item, root){
-		return (item.compareDocumentPosition(root) == 2);
-	};
-	*/
 
 	// test to see if node is below root
 	var _isDescendant = function(node, root){
@@ -1079,14 +1072,6 @@ define([
 	// to make the determination (e.g. does it support QSA, does the query in
 	// question work in the native QSA impl, etc.).
 	var nua = navigator.userAgent;
-	// some versions of Safari provided QSA, but it was buggy and crash-prone.
-	// We need te detect the right "internal" webkit version to make this work.
-	var wk = "WebKit/";
-	var is525 = (
-		has("webkit") &&
-		(nua.indexOf(wk) > 0) &&
-		(parseFloat(nua.split(wk)[1]) > 528)
-	);
 
 	// IE QSA queries may incorrectly include comment nodes, so we throw the
 	// zipping function into "remove" comments mode instead of the normal "skip
@@ -1094,24 +1079,25 @@ define([
 	var noZip = has("ie") ? "commentStrip" : "nozip";
 
 	var qsa = "querySelectorAll";
-	var qsaAvail = (
-		!!getDoc()[qsa] &&
-		// see #5832
-		(!has("safari") || (has("safari") > 3.1) || is525 )
-	);
+	var qsaAvail = !!getDoc()[qsa];
 
 	//Don't bother with n+3 type of matches, IE complains if we modify those.
 	var infixSpaceRe = /n\+\d|([^ ])?([>~+])([^ =])?/g;
 	var infixSpaceFunc = function(match, pre, ch, post){
 		return ch ? (pre ? pre + " " : "") + ch + (post ? " " + post : "") : /*n+3*/ match;
 	};
-
+	
+	//Don't apply the infixSpaceRe to attribute value selectors
+	var attRe = /([^[]*)([^\]]*])?/g;
+	var attFunc = function(match, nonAtt, att) {
+		return nonAtt.replace(infixSpaceRe, infixSpaceFunc) + (att||"");
+	};
 	var getQueryFunc = function(query, forceDOM){
 		//Normalize query. The CSS3 selectors spec allows for omitting spaces around
 		//infix operators, >, ~ and +
 		//Do the work here since detection for spaces is used as a simple "not use QSA"
 		//test below.
-		query = query.replace(infixSpaceRe, infixSpaceFunc);
+		query = query.replace(attRe, attFunc);
 
 		if(qsaAvail){
 			// if we've got a cached variant and we think we can do it, run it!

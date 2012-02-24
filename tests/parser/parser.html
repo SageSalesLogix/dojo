@@ -3,13 +3,22 @@
 	<head>
 		<title>Parser Unit Test</title>
 		<style type="text/css">     
-			@import "../resources/dojo.css";
+			@import "../../resources/dojo.css";
 		</style>
-		<script type="text/javascript" src="../dojo.js" data-dojo-config="isDebug:true, async:true"></script>
+		<script type="text/javascript" src="../../dojo.js" data-dojo-config="isDebug:true, async:true"></script>
 		<script type="text/javascript">
+		var MyNonDojoClass = function() {};
+		MyNonDojoClass.extend = function(){
+			var args = arguments;
+			return function() {
+				this.expectedClass = true;
+				this.params = args;
+			};
+		};
+
 		require(["dojo/_base/kernel", "dojo/_base/lang", "dojo/_base/array", "dojo/_base/declare", "dojo/_base/html", "dojo/Stateful", "dojo/Evented",
-				"doh", "dojo/date/stamp", "dojo/aspect", "dojo/parser", "dojo/domReady!"],
-				function(dojo, dlang, darray, declare, dhtml, Stateful, Evented, doh, dstamp, aspect, parser){
+				"doh", "dojo/date/stamp", "dojo/aspect", "dojo/tests/resources/AMDWidget", "dojo/tests/resources/AMDMixin", "dojo/parser", "dojo/domReady!"],
+				function(dojo, dlang, darray, declare, dhtml, Stateful, Evented, doh, dstamp, aspect, AMDWidget, AMDMixin, parser){
 
 			var mixin = dojo.mixin,
 				extend = dojo.extend,
@@ -87,7 +96,7 @@
 				checked: false,
 
 				// other attributes native to HTML
-				value: "",
+				value: "default value",
 				title: "default title",
 				tabIndex: "0",		// special because mixed case
 
@@ -151,6 +160,18 @@
 				onclick: function() {this.prototypeOnclick=true;}
 			});
 
+			declare("tests.parser.ClassForMixins", null, {
+				classDone: true
+			});
+
+			declare("tests.parser.Mixin1", null, {
+				mixin1Done: true
+			});
+
+			declare("tests.parser.Mixin2", null, {
+				mixin2Done: true
+			});
+
 			deepTestProp = {
 				blah: {
 					thinger: 1
@@ -167,13 +188,12 @@
 						// Running the parser here so that failures appear in test log
 							parser.parse(dhtml.byId("main"));
 					},
-
-						function testDataDojoId(t){
+					function testDataDojoId(t){
 						t.t(typeof obj == "object");
 					},
-						function testJsId(t){
-							t.t(typeof obj3 == "object");
-						},
+					function testJsId(t){
+						t.t(typeof obj3 == "object");
+					},
 					// Attribute parsing tests
 					function testStrProp(t){
 						// normal string parameter
@@ -283,7 +303,6 @@
 					function testSubNodeParse(t){
 						t.f(exists("obj2"));
 						var toParse = dhtml.byId("toParse");
-						toParse.setAttribute("dojoType", toParse.getAttribute("type"));
 						parser.parse(toParse.parentNode);
 						t.t(exists("obj2"));
 						t.is("tests.parser.Class1", obj2.declaredClass);
@@ -416,6 +435,12 @@
 						objOnWatch.onclick();
 						doh.t(objOnWatch.prototypeOnclick, "ensures original was called");
 						doh.t(objOnWatch.boolProp1, "ensure on executed in scope");
+					},
+					
+					function testMID(){
+						// testing specifying data-dojo-type as mid
+						doh.t(typeof objAMDWidget == "object");
+						doh.is("Value1", objAMDWidget.params.value, "ensure object was properly parsed using MID");
 					}
 				]);
 
@@ -476,6 +501,7 @@
 						doh.is("zaz", params.bar, "bar");
 						doh.is("escaped\"dq", params.bob, "bob");
 						doh.is("escaped\'sq", params.frank, "frank");
+						//doh.f("value" in params, "value not specified");	// fails in IE8, thinks value=="on"
 					},
 					function input2(){
 						var widgets = parser.instantiate([dhtml.byId("ieInput2")]);
@@ -487,6 +513,7 @@
 						doh.f("data-dojo-type" in params, "data-dojo-type");
 						doh.f("data-dojo-props" in params, "data-dojo-props");
 						doh.is("hi", params.foo, "foo");
+						doh.f("value" in params, "value not specified");
 					},
 					function input3(){
 						var widgets = parser.instantiate([dhtml.byId("ieInput3")]);
@@ -579,6 +606,34 @@
 					doh.is("function", typeof button.onClick, "created as function");
 					doh.t(buttonClicked == button.onClick, "points to specified function");
 				});
+				
+				doh.register("parser.instantiate()", function instantiate1() {
+					var nodes = [dhtml.byId("objId1"),dhtml.byId("objId2"),dhtml.byId("contId1"),dhtml.byId("objId3")];
+					parser.instantiate(nodes);
+					doh.is("object", typeof objI1, "widget 1 created");
+					doh.is("object", typeof objI2, "widget 2 created");
+					doh.t(contI1, "container created");
+					doh.is("object", typeof objI3, "child widget 3 created");
+					doh.f(window.objI4, "child widget 4 not created");
+				});
+
+				doh.register("data-dojo-mixins support", function mixins() {
+					parser.parse("mixins");
+					doh.t(resultMixins1, "object using data-dojo-mixins created from an already parsed type");
+					doh.t(resultMixins1.mixin1Done, "mixin1 correctly mixed in");
+					doh.t(resultMixins1.mixin2Done, "mixin2 correctly mixed in");
+					doh.t(resultMixins1.amdMixinDone, "amd mixin correctly mixed in");
+					doh.t(resultMixins2, "object using data-dojo-mixins created from a non parsed type");
+					doh.t(resultMixins2.classDone, "class correctly created");
+					doh.t(resultMixins2.mixin1Done, "mixin1 correctly mixed in");
+					doh.t(resultMixins2.mixin2Done, "mixin2 correctly mixed in");
+					doh.t(resultMixins2.amdMixinDone, "amd mixin correctly mixed in");
+					doh.t(resultNonDojoMixin.expectedClass, "correct class is returned for composeJS mixin");
+					doh.is(resultNonDojoMixin.params.length, 2, "correct # of params were passed to compose JS");
+					doh.is(resultNonDojoMixin.params[0], tests.parser.Mixin1, "correct param 1");
+					doh.is(resultNonDojoMixin.params[1], tests.parser.Mixin2, "correct param 2");
+				});
+				
 				doh.run();
 			})
 		});
@@ -614,10 +669,6 @@
 					this.callCount2++;
 				</script>
 			</div>
-			<div>
-				<div type="tests.parser.Class1" jsId="obj2" id="toParse">
-				</div>
-			</div>
 			<div dojoType="tests.parser.Class2" jsId="obj3">
 			</div>
 			<div dojoType="tests.parser.Class3" jsId="obj4">
@@ -646,7 +697,7 @@
 
 			<div>
 				<div dojoType="tests.parser.ShieldedContainer" jsId="container2">
-					<!-- this script tag should get passed as param to NormalContainer constructor -->
+					<!-- this script tag should get passed as param to ShieldedContainer constructor -->
 					<script type="dojo/method" event="incr" args="x">
 						return x+1;
 					</script>
@@ -708,7 +759,18 @@
 					</script>
 				</div>
 			</div>
+			
+			<!--  section for testing mid syntax for data-dojo-type -->
+			<div>
+				<div data-dojo-id="objAMDWidget" data-dojo-type="dojo/tests/resources/AMDWidget" data-dojo-props="value: 'Value1'"></div>
+			</div>
 		</div> <!-- end of <div id=main> -->
+
+		<!-- section for testing parse on a subnode -->
+		<div>
+			<div data-dojo-type="tests.parser.Class1" jsId="obj2" id="toParse">
+			</div>
+		</div>
 
 		<!-- section for testing that dir, lang attribute trickles down from ancestor -->
 		<div id="dirSection1">
@@ -783,6 +845,50 @@
 		<!-- tests for function names native to HTML, specifically an issue on IE<8 -->
 		<div id="functions">
 			<button dojoType="tests.parser.Button" onClick="buttonClicked" jsId="button">Click me</button>
+		</div>
+		
+		<!-- section for testing parser.instantiate() -->
+		<div id="instantiate1">
+			<div dojoType="tests.parser.Class1" jsId="objI1" id="objId1"
+				strProp1="text" strProp2=""
+				intProp="5"
+				arrProp="foo, bar, baz"
+				arrProp2=""
+				boolProp1="true" boolProp2="false"
+				dateProp1="2006-01-01" dateProp2="" dateProp3="now"
+				funcProp2="foo" funcProp3="this.func3Called=true;"
+			>
+			</div>
+			<div data-dojo-type="tests.parser.Class1" data-dojo-id="objI2" id="objId2"
+				data-dojo-props="
+					strProp1:'text',
+					strProp2:'',
+					intProp:5,
+					arrProp:['foo', 'bar', 'baz'],
+					arrProp2:[],
+					boolProp1:true,
+					boolProp2:'false',
+					dateProp1:'2006-01-01',
+					dateProp2:'',
+					dateProp3:'now',
+					funcProp2:foo,
+					funcProp3:'this.func3Called=true;'"
+			>
+			</div>
+			<div dojoType="tests.parser.NormalContainer" jsId="contI1" id ="contId1">
+				<div dojoType="tests.parser.Class1" jsId="objI3" id="objId3"></div>
+				<div dojoType="tests.parser.Class1" jsId="objI4" id="objId4"></div>
+			</div>
+		</div>
+
+		<!-- tests for data-dojo-mixins -->
+		<div id="mixins">
+			<div data-dojo-type="tests.parser.Class1" data-dojo-mixins="tests.parser.Mixin1,tests.parser.Mixin2,dojo/tests/resources/AMDMixin"
+					data-dojo-id="resultMixins1"></div>
+			<div data-dojo-type="tests.parser.ClassForMixins" data-dojo-mixins="tests.parser.Mixin1, tests.parser.Mixin2, dojo/tests/resources/AMDMixin"
+					data-dojo-id="resultMixins2"></div>
+			<div data-dojo-type="MyNonDojoClass" data-dojo-mixins="tests.parser.Mixin1, tests.parser.Mixin2"
+					data-dojo-id="resultNonDojoMixin"></div>
 		</div>
 
 	</body>

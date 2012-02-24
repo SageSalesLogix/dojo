@@ -65,7 +65,9 @@ return declare("dojo.Stateful", null, {
 		//	This is equivalent to calling set(foo, "Howdy") and set(bar, 3)
 		if(typeof name === "object"){
 			for(var x in name){
-				this.set(x, name[x]);
+				if(name.hasOwnProperty(x)){
+					this.set(x, name[x]);
+				}
 			}
 			return this;
 		}
@@ -101,11 +103,7 @@ return declare("dojo.Stateful", null, {
 					if(propertyCallbacks){
                         propertyCallbacks = propertyCallbacks.slice();
 						for(var i = 0, l = propertyCallbacks.length; i < l; i++){
-							try{
-								propertyCallbacks[i].call(self, name, oldValue, value);
-							}catch(e){
-								console.error(e);
-							}
+							propertyCallbacks[i].call(self, name, oldValue, value);
 						}
 					}
 				};

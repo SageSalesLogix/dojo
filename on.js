@@ -103,7 +103,7 @@ define(["./has!dom-addeventlistener?:./aspect", "./_base/kernel", "./has"], func
 		return addListener(target, type, listener, dontFix, matchesTarget);
 	};
 	var touchEvents = /^touch/;
-	function addListener(target, type, listener, dontFix, matchesTarget){		
+	function addListener(target, type, listener, dontFix, matchesTarget){
 		// event delegation:
 		var selector = type.match(/(.*):(.*)/);
 		// if we have a selector:event, the last one is interpreted as an event, and we use event delegation
@@ -131,12 +131,13 @@ define(["./has!dom-addeventlistener?:./aspect", "./_base/kernel", "./has"], func
 		if(target.addEventListener){
 			// the target has addEventListener, which should be used if available (might or might not be a node, non-nodes can implement this method as well)
 			// check for capture conversions
-			var capture = type in captures;
-			target.addEventListener(capture ? captures[type] : type, listener, capture);
+			var capture = type in captures,
+				adjustedType = capture ? captures[type] : type;
+			target.addEventListener(adjustedType, listener, capture);
 			// create and return the signal
 			return {
 				remove: function(){
-					target.removeEventListener(type, listener, capture);
+					target.removeEventListener(adjustedType, listener, capture);
 				}
 			};
 		}
@@ -158,31 +159,36 @@ define(["./has!dom-addeventlistener?:./aspect", "./_base/kernel", "./has"], func
 		//		The event to listen for
 		// children:
 		//		Indicates if children elements of the selector should be allowed. This defaults to 
-		// 		true (except in the case of normally non-bubbling events like mouse.enter, in which case it defaults to false).
+		// 		true
 		//	example:
 		//		define(["dojo/on", "dojo/mouse"], function(listen, mouse){
 		//			on(node, on.selector(".my-class", mouse.enter), handlerForMyHover);
 		return function(target, listener){
-			var matchesTarget = this;
-			var bubble = eventType.bubble;
+			var matchesTarget = this,
+				select = typeof selector == "function" ?
+					selector : // if the selector is function, use it to select the node, otherwise use the matches method
+					function select(eventTarget){
+						// see if we have a valid matchesTarget or default to dojo.query
+						matchesTarget = matchesTarget && matchesTarget.matches ? matchesTarget : dojo.query;
+						// there is a selector, so make sure it matches
+						while(!matchesTarget.matches(eventTarget, selector, target)){
+							if(eventTarget == target || children === false || !(eventTarget = eventTarget.parentNode) || eventTarget.nodeType != 1){ // intentional assignment
+								return;
+							}
+						}
+						return eventTarget;
+					},
+				bubble = eventType.bubble;
 			if(bubble){
-				// the event type doesn't naturally bubble, but has a bubbling form, use that
-				eventType = bubble;
-			}else if(children !== false){
-				// for normal bubbling events we default to allowing children of the selector
-				children = true;
+				// the event type doesn't naturally bubble, but has a bubbling form, use that, and give it the selector so it can perform the select itself
+				return on(target, bubble(select), listener);
 			}
+			// standard event delegation
 			return on(target, eventType, function(event){
-				var eventTarget = event.target;
-				// see if we have a valid matchesTarget or default to dojo.query
-				matchesTarget = matchesTarget && matchesTarget.matches ? matchesTarget : dojo.query;
-				// there is a selector, so make sure it matches
-				while(!matchesTarget.matches(eventTarget, selector, target)){
-					if(eventTarget == target || !children || !(eventTarget = eventTarget.parentNode)){ // intentional assignment
-						return;
-					}
-				}
-				return listener.call(eventTarget, event);
+				// call select to see if we match
+				var eventTarget = select(event.target);
+				// if it matches we call the listener
+				return eventTarget && listener.call(eventTarget, event);
 			});
 		};
 	};
@@ -371,8 +377,9 @@ define(["./has!dom-addeventlistener?:./aspect", "./_base/kernel", "./has"], func
 				var emiter = target[type];
 				if(!emiter || !emiter.listeners){
 					var oldListener = emiter;
-					target[type] = emiter = Function('event', 'var callee = arguments.callee; for(var i = 0; i<callee.listeners.length; i++){var listener = _dojoIEListeners_[callee.listeners[i]]; if(listener){listener.call(this,event);}}');
+					emiter = Function('event', 'var callee = arguments.callee; for(var i = 0; i<callee.listeners.length; i++){var listener = _dojoIEListeners_[callee.listeners[i]]; if(listener){listener.call(this,event);}}');
 					emiter.listeners = [];
+					target[type] = emiter;
 					emiter.global = this;
 					if(oldListener){
 						emiter.listeners.push(_dojoIEListeners_.push(oldListener) - 1);
@@ -409,6 +416,7 @@ define(["./has!dom-addeventlistener?:./aspect", "./_base/kernel", "./has"], func
 				}catch(e){
 				}
 			}
+			this.defaultPrevented = true;
 			this.returnValue = false;
 		};
 	}

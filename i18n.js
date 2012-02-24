@@ -87,6 +87,8 @@ define(["./_base/kernel", "require", "./has", "./_base/array", "./_base/config",
 			return /^\./.test(bundlePath) ? toAbsMid(bundlePath) + "/" +  id.substring(bundlePath.length) : id;
 		},
 
+		checkForLegacyModules = function(){},
+
 		load = function(id, require, load){
 			// note: id is always absolute
 			var
@@ -99,6 +101,7 @@ define(["./_base/kernel", "require", "./has", "./_base/array", "./_base/config",
 				target= bundlePathAndName + "/" + targetLocale;
 
 			if(localeSpecified){
+				checkForLegacyModules(target);
 				if(cache[target]){
 					// a request for a specific local that has already been loaded; just return it
 					load(cache[target]);
@@ -128,6 +131,9 @@ define(["./_base/kernel", "require", "./has", "./_base/array", "./_base/config",
 			});
 		};
 
+	if(has("dojo-unit-tests")){
+		var unitTests = thisModule.unitTests = [];
+	}
 
 	has.add("dojo-v1x-i18n-Api",
 		// if true, define the v1.x i18n functions
@@ -136,13 +142,27 @@ define(["./_base/kernel", "require", "./has", "./_base/array", "./_base/config",
 
 	if(has("dojo-v1x-i18n-Api")){
 		var
+			__evalError = {},
+
 			evalBundle=
-				// keep the minifiers off our define!
+				// use the function ctor to keep the minifiers away and come close to global scope
 				// if bundle is an AMD bundle, then __amdResult will be defined; otherwise it's a pre-amd bundle and the bundle value is returned by eval
-				new Function("bundle", "var __preAmdResult, __amdResult; function define(bundle){__amdResult= bundle;} __preAmdResult= eval(bundle); return [__preAmdResult, __amdResult];"),
+				new Function("bundle, __evalError",
+					"var __amdResult, define = function(x){__amdResult= x;};" +
+					"return [(function(){" +
+								"try{eval(arguments[0]);}catch(e){}" +
+								"if(__amdResult)return 0;" +
+								"try{return eval('('+arguments[0]+')');}" +
+								"catch(e){__evalError.e = e; return __evalError;}" +
+							"})(arguments[0]) , __amdResult];"
+				),
 
 			fixup= function(url, preAmdResult, amdResult){
 				// nls/<locale>/<bundle-name> indicates not the root.
+				if(preAmdResult===__evalError){
+					console.error("failed to evaluate i18n bundle; url=" + url, __evalError.e);
+					return {};
+				}
 				return preAmdResult ? (/nls\/[^\/]+\/[^\/]+$/.test(url) ? preAmdResult : {root:preAmdResult, _v1x:1}) : amdResult;
 			},
 
@@ -166,7 +186,7 @@ define(["./_base/kernel", "require", "./has", "./_base/array", "./_base/config",
 							url:url,
 							sync:true,
 							load:function(text){
-								var result = evalBundle(text);
+								var result = evalBundle(text, __evalError);
 								results.push(cache[url]= fixup(url, result[0], result[1]));
 							},
 							error:function(){
@@ -175,8 +195,36 @@ define(["./_base/kernel", "require", "./has", "./_base/array", "./_base/config",
 						});
 					}
 				});
-				callback.apply(null, results);
+				callback && callback.apply(null, results);
+			},
+
+			normalizeLocale = thisModule.normalizeLocale= function(locale){
+				var result = locale ? locale.toLowerCase() : dojo.locale;
+				if(result == "root"){
+					result = "ROOT";
+				}
+				return result;
+			},
+
+			forEachLocale = function(locale, func){
+				// this function is equivalent to v1.6 dojo.i18n._searchLocalePath with down===true
+				var parts = locale.split("-");
+				while(parts.length){
+					if(func(parts.join("-"))){
+						return true;
+					}
+					parts.pop();
+				}
+				return func("ROOT");
 			};
+
+		checkForLegacyModules = function(target){
+			// legacy code may have already loaded [e.g] the raw bundle x/y/z at x.y.z; when true, push into the cache
+			for(var names = target.split("/"), object = dojo.global[names[0]], i = 1; object && i<names.length; object = object[names[i++]]){}
+			if(object){
+				cache[target] = object;
+			}
+		};
 
 		thisModule.getLocalization= function(moduleName, bundleName, locale){
 			var result,
@@ -185,13 +233,61 @@ define(["./_base/kernel", "require", "./has", "./_base/array", "./_base/config",
 			return result;
 		};
 
-		thisModule.normalizeLocale= function(locale){
-			var result = locale ? locale.toLowerCase() : dojo.locale;
-			if(result == "root"){
-				result = "ROOT";
+		thisModule._preloadLocalizations = function(/*String*/bundlePrefix, /*Array*/localesGenerated){
+			//	summary:
+			//		Load built, flattened resource bundles, if available for all
+			//		locales used in the page. Only called by built layer files.
+			//
+			//  note: this function a direct copy of v1.6 function of same name
+
+			function preload(locale){
+				locale = normalizeLocale(locale);
+				forEachLocale(locale, function(loc){
+					for(var i=0; i<localesGenerated.length;i++){
+						if(localesGenerated[i] == loc){
+							syncRequire([bundlePrefix.replace(/\./g, "/")+"_"+loc]);
+							return true; // Boolean
+						}
+					}
+					return false; // Boolean
+				});
 			}
-			return result;
+			preload();
+			var extra = dojo.config.extraLocale||[];
+			for(var i=0; i<extra.length; i++){
+				preload(extra[i]);
+			}
 		};
+
+		if(has("dojo-unit-tests")){
+			unitTests.push(function(doh){
+				doh.register("tests.i18n.unit", function(t){
+					var check;
+
+					check = evalBundle("{prop:1}", __evalError);
+					t.is({prop:1}, check[0]); t.is(undefined, check[1]);
+
+					check = evalBundle("({prop:1})", __evalError);
+					t.is({prop:1}, check[0]); t.is(undefined, check[1]);
+
+					check = evalBundle("{'prop-x':1}", __evalError);
+					t.is({'prop-x':1}, check[0]); t.is(undefined, check[1]);
+
+					check = evalBundle("({'prop-x':1})", __evalError);
+					t.is({'prop-x':1}, check[0]); t.is(undefined, check[1]);
+
+					check = evalBundle("define({'prop-x':1})", __evalError);
+					t.is(0, check[0]); t.is({'prop-x':1}, check[1]);
+
+					check = evalBundle("define({'prop-x':1});", __evalError);
+					t.is(0, check[0]); t.is({'prop-x':1}, check[1]);
+
+					check = evalBundle("this is total nonsense and should throw an error", __evalError);
+					t.is(__evalError, check[0]); t.is(undefined, check[1]);
+					t.is({}, fixup("some/url", check[0], check[1]));
+				});
+			});
+		}
 	}
 
 	return lang.mixin(thisModule, {

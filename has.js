@@ -44,7 +44,7 @@ define(["require"], function(require) {
 			//		Returns the value of the feature named by name. The feature must have been
 			//		previously added to the cache by has.add.
 
-			return cache[name] = typeof cache[name] == "function" ? cache[name](global, doc, element) : cache[name]; // Boolean
+			return typeof cache[name] == "function" ? (cache[name] = cache[name](global, doc, element)) : cache[name]; // Boolean
 		};
 
 		has.cache = cache;
@@ -109,8 +109,6 @@ define(["require"], function(require) {
 		has.add("touch", "ontouchstart" in document);
 		// I don't know if any of these tests are really correct, just a rough guess
 		has.add("device-width", screen.availWidth || innerWidth);
-		has.add("agent-ios", !!agent.match(/iPhone|iP[ao]d/));
-		has.add("agent-android", agent.indexOf("android") > 1);
 	}
 
 	has.clearElement = /*===== dojo.has.clearElement= ======*/ function(element) {

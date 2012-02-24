@@ -156,6 +156,7 @@
 						"doh.is(1, (dojo.query('[foo$=\"thud\"]')).length);",
 						"doh.is(1, (dojo.query('[foo$=thud]')).length);",
 						"doh.is(1, (dojo.query('[foo$=\"thudish\"]')).length);",
+						"doh.is(1, (dojo.query('[id$=\\'55555\\']')).length);",
 						"doh.is(1, (dojo.query('#t [foo$=thud]')).length);",
 						"doh.is(1, (dojo.query('#t [ title $= thud ]')).length);",
 						"doh.is(0, (dojo.query('#t span[ title $= thud ]')).length);",
@@ -245,6 +246,25 @@
 						"doh.is(dojo.byId('radio2'), dojo.query('#t2 > input[type=radio]:checked')[0]);",
 						"doh.is(2, dojo.query('#t2select option:checked').length);",
 						
+						// special characters in attribute values ()
+						function attrSpecialChars(){
+							// bug 10651
+							doh.is(1, dojo.query('option[value=a+b]', 'attrSpecialChars').length, "value=a+b");
+							doh.is(1, dojo.query('option[value=a~b]', 'attrSpecialChars').length, "value=a~b");
+							doh.is(1, dojo.query('option[value=a^b]', 'attrSpecialChars').length, "value=a^b");
+							doh.is(1, dojo.query('option[value=\"a+b\"]', 'attrSpecialChars').length, "value=\"a^b\"");
+							doh.is(1, dojo.query('option[value=\"a~b\"]', 'attrSpecialChars').length, "value=\"a~b\"");
+							doh.is(1, dojo.query('option[value=\"a^b\"]', 'attrSpecialChars').length, "value=\"a^b\"");
+
+							// selector with substring that contains equals sign (bug7479)
+							doh.is(1, dojo.query("a[href*='foo=bar']", 'attrSpecialChars').length);
+
+							// selector with substring that contains brackets (bug 9193, 11189)
+							// note: inner quotes don't work in second dojo.query(), not sure why
+							doh.is(1, dojo.query('input[name="data[foo][bar]"]', 'attrSpecialChars').length, "data[foo][bar]");
+							doh.is(1, dojo.query('input[name="foo\\[0\\].bar"]', 'attrSpecialChars').length, "foo[0].bar");
+						},
+
 						// check for correct document order
 						function domOrder() {
 							var inputs = dojo.query(".upperclass .lowerclass input");
@@ -395,6 +415,33 @@
 					<p class="two subP"><a class="subA">two</a></p>
 				</div>
 			</div>
+		</div>
+		<div id='other'>
+		  <div id='abc55555'></div>
+		  <div id='abd55555efg'></div>
+		  <div id='55555abc'></div>
+		  <div id='1'></div>
+		  <div id='2c'></div>
+		  <div id='3ch'></div>
+		  <div id='4chr'></div>
+		  <div id='5char'></div>
+		  <div id='6chars'></div>
+		</div>
+		
+		<div id="attrSpecialChars">
+			<select name="special">
+				<!-- tests for special characters in attribute values (characters that are part of query syntax) -->
+				<option value="a+b">1</option>
+				<option value="a~b">2</option>
+				<option value="a^b">3</option>
+			</select>
+
+			<!-- tests for quotes in attribute values -->
+			<a href="foo=bar">hi</a>
+			<!-- tests for brackets in attribute values -->
+			<input name="data[foo][bar]">
+			<!-- attribute name with a dot, goes down separate code path -->
+			<input name="foo[0].bar">
 		</div>
 	</body>
 </html>

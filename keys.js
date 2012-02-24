@@ -1,4 +1,4 @@
-define(["./_base/kernel", "./_base/sniff"], function(dojo, has) {
+define(["./_base/kernel", "./sniff"], function(dojo, has) {
 	// module:
 	//		dojo/keys
 	// summary:
@@ -18,7 +18,7 @@ return dojo.keys = {
 	SHIFT: 16,
 	CTRL: 17,
 	ALT: 18,
-	META: has("safari") ? 91 : 224,		// the apple key on macs
+	META: has("webkit") ? 91 : 224,		// the apple key on macs
 	PAUSE: 19,
 	CAPS_LOCK: 20,
 	ESCAPE: 27,
