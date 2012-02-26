@@ -1,5 +1,4 @@
 define(["../has", "../_base/kernel"], function(has, dojo){
-"use strict";
 // summary:
 //		A small lightweight query selector engine that implements CSS2.1 selectors 
 // 		minus pseudo-classes and the sibling combinator, plus CSS3 attribute selectors
