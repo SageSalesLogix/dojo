@@ -2,7 +2,6 @@ define(["../has", "require"],
 		function(has, require){
 // summary:
 //		This module handles loading the appropriate selector engine for the given browser
-"use strict";
 var testDiv = document.createElement("div");
 has.add("dom-qsa2.1", !!testDiv.querySelectorAll);
 has.add("dom-qsa3", function(){

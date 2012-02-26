@@ -12,7 +12,6 @@ define(["./aspect", "./on"], function(aspect, on){
 	//		|
 	//		|	widget.emit("open", {name:"some event", ...});
 
- 	"use strict";
  	var after = aspect.after;
 	function Evented(){
 	}

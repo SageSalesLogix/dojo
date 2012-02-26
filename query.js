@@ -1,6 +1,5 @@
 define(["./_base/kernel", "./has", "./dom", "./on", "./_base/array", "./_base/lang", "./selector/_loader", "./selector/_loader!default"],
 	function(dojo, has, dom, on, array, lang, loader, defaultEngine){
-"use strict";
 
 	has.add("array-extensible", function(){
 		// test to see if we can extend an array (not supported in old IE)

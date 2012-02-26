@@ -30,7 +30,6 @@ define(["./has!dom-addeventlistener?:./aspect", "./_base/kernel", "./has"], func
 	//		|	obj.onfoo({key:"value"});
 	//		If you use on.emit on a DOM node, it will use native event dispatching when possible.
 
- 	"use strict";
 	if(has("dom")){ // check to make sure we are in a browser, this module should work anywhere
 		var major = window.ScriptEngineMajorVersion;
 		has.add("jscript", major && (major() + ScriptEngineMinorVersion() / 10));
