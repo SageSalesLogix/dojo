@@ -168,7 +168,7 @@ define(["./_base/sniff", "./dom"], function(has, dom){
 	}else if(has("ie") && (has("ie") < 9 || has("quirks"))){
 		getComputedStyle = function(node){
 			// IE (as of 7) doesn't expose Element like sane browsers
-			return node.nodeType == 1 /* ELEMENT_NODE*/ ? node.currentStyle : {};
+			return node.nodeType === 1 && node.currentStyle /* ELEMENT_NODE*/ ? node.currentStyle : {};
 		};
 	}else{
 		getComputedStyle = function(node){
