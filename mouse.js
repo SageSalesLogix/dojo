@@ -30,7 +30,7 @@ define(["./_base/kernel", "./on", "./has", "./dom", "./_base/window"], function(
 	======*/
 
     has.add("dom-quirks", win.doc && win.doc.compatMode == "BackCompat");
- 	has.add("events-mouseenter", win.doc && "onmouseenter" in win.doc.createElement("div"));
+	has.add("events-mouseenter", win.doc && "onmouseenter" in win.doc.createElement("div"));
 
 	var mouseButtons;
 	if(has("dom-quirks") || !has("dom-addeventlistener")){
@@ -124,10 +124,11 @@ define(["./_base/kernel", "./on", "./has", "./dom", "./_base/window"], function(
 					return listener.call(target, evt);
 				} 
 			});
-		}
+		};
 		return handler;
 	}
 	return {
+		_eventHandler: eventHandler,		// for dojo/touch
 		enter: eventHandler("mouseover"),
 		leave: eventHandler("mouseout"),
 		isLeft: mouseButtons.isLeft,

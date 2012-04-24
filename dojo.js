@@ -582,7 +582,9 @@
 			for(var dojoDir, src, match, scripts = doc.getElementsByTagName("script"), i = 0; i < scripts.length && !match; i++){
 				if((src = scripts[i].getAttribute("src")) && (match = src.match(/(.*)\/?dojo\.js(\W|$)/i))){
 					// if baseUrl wasn't explicitly set, set it here to the dojo directory; this is the 1.6- behavior
-					userConfig.baseUrl = dojoDir = userConfig.baseUrl || defaultConfig.baseUrl || match[1];
+					// set in defaultConfig which allow user config to override
+					dojoDir = match[1];
+					defaultConfig.baseUrl = defaultConfig.baseUrl || dojoDir;
 
 					// see if there's a dojo configuration stuffed into the node
 					src = (scripts[i].getAttribute("data-dojo-config") || scripts[i].getAttribute("djConfig"));
@@ -612,14 +614,16 @@
 		// configure the loader; let the user override defaults
 		req.rawConfig = {};
 		config(defaultConfig, 1);
-		config(userConfig, 1);
-		config(dojoSniffConfig, 1);
 
+		// do this before setting userConfig to allow userConfig to override
 		if(has("dojo-cdn")){
 			packs.dojo.location = dojoDir;
 			packs.dijit.location = dojoDir + "../dijit/";
 			packs.dojox.location = dojoDir + "../dojox/";
 		}
+
+		config(userConfig, 1);
+		config(dojoSniffConfig, 1);
 
 	}else{
 		// no config API, assume defaultConfig has everything the loader needs...for the entire lifetime of the application
@@ -710,7 +714,8 @@
 						injected: arrived,
 						deps: deps,
 						def: a2 || noop,
-						require: referenceModule ? referenceModule.require : req
+						require: referenceModule ? referenceModule.require : req,
+						gc: 1 //garbage collect
 					});
 					modules[module.mid] = module;
 
@@ -757,6 +762,21 @@
 						req.undef(mid, module);
 					};
 				}
+				if(has("dojo-sync-loader")){
+					result.syncLoadNls = function(mid){
+						var nlsModuleInfo = getModuleInfo(mid, module),
+							nlsModule = modules[nlsModuleInfo.mid];
+						if(!nlsModule || !nlsModule.executed){
+							cached = cache[nlsModuleInfo.mid] || cache[nlsModuleInfo.cacheId];
+							if(cached){
+								evalModuleText(cached);
+								nlsModule = modules[nlsModuleInfo.mid];
+							}
+						}
+						return nlsModule && nlsModule.executed && nlsModule.result;
+					};
+				}
+
 			}
 			return result;
 		},
@@ -779,6 +799,7 @@
 			if(module.url){
 				waiting[module.url] = module.pack || 1;
 			}
+			startTimer();
 		},
 
 		setArrived = function(module){
@@ -1083,6 +1104,10 @@
 					i++;
 				}
 			}
+			// delete references to synthetic modules
+	        if (/^require\*/.test(module.mid)) {
+	            delete modules[module.mid];
+	        }
 		},
 
 		circleTrace = [],
@@ -1215,7 +1240,6 @@
 						checkComplete();
 					};
 
-				setRequested(module);
 				if(plugin.load){
 					plugin.load(module.prid, module.req, onLoad);
 				}else if(plugin.loadQ){
@@ -1280,6 +1304,7 @@
 				if(module.executed || module.injected || waiting[mid] || (module.url && ((module.pack && waiting[module.url]===module.pack) || waiting[module.url]==1))){
 					return;
 				}
+				setRequested(module);
 
 				if(has("dojo-combo-api")){
 					var viaCombo = 0;
@@ -1294,7 +1319,6 @@
 						viaCombo = req.combo.add(0, module.mid, module.url, req);
 					}
 					if(viaCombo){
-						setRequested(module);
 						comboPending= 1;
 						return;
 					}
@@ -1305,7 +1329,6 @@
 					return;
 				} // else a normal module (not a plugin)
 
-				setRequested(module);
 
 				var onLoadCallback = function(){
 					runDefQ(module);
@@ -1510,7 +1533,8 @@
 	}
 
 	if(has("dom")){
-		has.add("ie-event-behavior", doc.attachEvent && (typeof opera === "undefined" || opera.toString() != "[object Opera]"));
+		// the typically unnecessary !! in front of doc.attachEvent is due to an opera bug; see	#15096
+		has.add("ie-event-behavior", !!doc.attachEvent && (typeof opera === "undefined" || opera.toString() != "[object Opera]"));
 	}
 
 	if(has("dom") && (has("dojo-inject-api") || has("dojo-dom-ready-api"))){
@@ -1546,7 +1570,6 @@
 				// insert a script element to the insert-point element with src=url;
 				// apply callback upon detecting the script has loaded.
 
-				startTimer();
 				var node = owner.node = doc.createElement("script"),
 					onLoad = function(e){
 						e = e || window.event;
@@ -1654,7 +1677,7 @@
 				});
 				args = [0, defaultDeps.concat(dependencies), mid];
 			}
-		}
+			}
 		if(!args){
 			args = arity == 1 ? [0, defaultDeps, mid] :
 				(arity == 2 ? (isArray(mid) ? [0, mid, dependencies] : (isFunction(dependencies) ? [mid, defaultDeps, dependencies] : [mid, [], dependencies])) :
@@ -1790,8 +1813,8 @@
 	}
 
 	if(has("dojo-config-api")){
-		var bootDeps = defaultConfig.deps || userConfig.deps || dojoSniffConfig.deps,
-			bootCallback = defaultConfig.callback || userConfig.callback || dojoSniffConfig.callback;
+		var bootDeps = dojoSniffConfig.deps ||  userConfig.deps || defaultConfig.deps,
+			bootCallback = dojoSniffConfig.callback || userConfig.callback || defaultConfig.callback;
 		req.boot = (bootDeps || bootCallback) ? [bootDeps || [], bootCallback] : 0;
 	}
 	if(!has("dojo-built")){

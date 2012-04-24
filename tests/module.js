@@ -1,5 +1,6 @@
 define([
 	"dojo/tests/_base",
+	"dojo/tests/promise",
 	"dojo/tests/cache",
 	"dojo/tests/i18n",
 	"dojo/tests/cldr",
@@ -20,6 +21,7 @@ define([
 	"dojo/tests/colors",
 	"dojo/tests/DeferredList",
 	"dojo/tests/Stateful",
+	"dojo/has!host-browser?dojo/tests/request",
 	"dojo/has!host-browser?dojo/tests/behavior",
 	"dojo/has!host-browser?dojo/tests/parser",
 	"dojo/has!host-browser?dojo/tests/html",

@@ -87,10 +87,18 @@ define(["./_base/kernel", "require", "./has", "./_base/array", "./_base/config",
 			return /^\./.test(bundlePath) ? toAbsMid(bundlePath) + "/" +  id.substring(bundlePath.length) : id;
 		},
 
-		checkForLegacyModules = function(){},
+		noop = function(){},
+
+		checkForLegacyModules = noop,
+
+		waitForPreloads = noop,
 
 		load = function(id, require, load){
 			// note: id is always absolute
+
+			if(waitForPreloads(id, require, load)){
+				return;
+			}
 			var
 				match= nlsRe.exec(id),
 				bundlePath= match[1] + "/",
@@ -141,30 +149,45 @@ define(["./_base/kernel", "require", "./has", "./_base/array", "./_base/config",
 	);
 
 	if(has("dojo-v1x-i18n-Api")){
+		// this code path assumes the dojo loader and won't work with a standard AMD loader
 		var
-			__evalError = {},
-
 			evalBundle=
-				// use the function ctor to keep the minifiers away and come close to global scope
-				// if bundle is an AMD bundle, then __amdResult will be defined; otherwise it's a pre-amd bundle and the bundle value is returned by eval
-				new Function("bundle, __evalError",
-					"var __amdResult, define = function(x){__amdResult= x;};" +
-					"return [(function(){" +
-								"try{eval(arguments[0]);}catch(e){}" +
-								"if(__amdResult)return 0;" +
-								"try{return eval('('+arguments[0]+')');}" +
-								"catch(e){__evalError.e = e; return __evalError;}" +
-							"})(arguments[0]) , __amdResult];"
-				),
+				// use the function ctor to keep the minifiers away (also come close to global scope, but this is secondary)
+				new Function(
+					"__bundle",                // the bundle to evalutate
+					"__checkForLegacyModules", // a function that checks if __bundle defined __mid in the global space
+					"__mid",                   // the mid that __bundle is intended to define
 
-			fixup= function(url, preAmdResult, amdResult){
-				// nls/<locale>/<bundle-name> indicates not the root.
-				if(preAmdResult===__evalError){
-					console.error("failed to evaluate i18n bundle; url=" + url, __evalError.e);
-					return {};
-				}
-				return preAmdResult ? (/nls\/[^\/]+\/[^\/]+$/.test(url) ? preAmdResult : {root:preAmdResult, _v1x:1}) : amdResult;
-			},
+					// returns one of:
+					//		1 => the bundle was an AMD bundle
+					//		a legacy bundle object that is the value of __mid
+					//		instance of Error => could not figure out how to evaluate bundle
+
+					  // used to detect when __bundle calls define
+					  "var define = function(){define.called = 1;},"
+					+ "    require = function(){define.called = 1;};"
+
+					+ "try{"
+					+		"define.called = 0;"
+					+		"eval(__bundle);"
+					+		"if(define.called==1)"
+								// bundle called define; therefore signal it's an AMD bundle
+					+			"return 1;"
+
+					+		"if((__checkForLegacyModules = __checkForLegacyModules(__mid)))"
+								// bundle was probably a v1.6- built NLS flattened NLS bundle that defined __mid in the global space
+					+			"return __checkForLegacyModules;"
+
+					+ "}catch(e){}"
+					// evaulating the bundle was *neither* an AMD *nor* a legacy flattened bundle
+					// either way, re-eval *after* surrounding with parentheses
+
+					+ "try{"
+					+ 		"return eval('('+__bundle+')');"
+					+ "}catch(e){"
+					+ 		"return e;"
+					+ "}"
+				),
 
 			syncRequire= function(deps, callback){
 				var results= [];
@@ -173,26 +196,42 @@ define(["./_base/kernel", "require", "./has", "./_base/array", "./_base/config",
 					if(cache[url]){
 						results.push(cache[url]);
 					}else{
-
-						try {
-							var bundle= require(mid);
-							if(bundle){
-								results.push(bundle);
-								return;
-							}
-						}catch(e){}
-
-						xhr.get({
-							url:url,
-							sync:true,
-							load:function(text){
-								var result = evalBundle(text, __evalError);
-								results.push(cache[url]= fixup(url, result[0], result[1]));
-							},
-							error:function(){
-								results.push(cache[url]= {});
-							}
-						});
+						var bundle= require.syncLoadNls(mid);
+						// don't need to check for legacy since syncLoadNls returns a module if the module
+						// (1) was already loaded, or (2) was in the cache. In case 1, if syncRequire is called
+						// from getLocalization --> load, then load will have called checkForLegacyModules() before
+						// calling syncRequire; if syncRequire is called from preloadLocalizations, then we
+						// don't care about checkForLegacyModules() because that will be done when a particular
+						// bundle is actually demanded. In case 2, checkForLegacyModules() is never relevant
+						// because cached modules are always v1.7+ built modules.
+						if(bundle){
+							results.push(bundle);
+						}else{
+							xhr.get({
+								url:url,
+								sync:true,
+								load:function(text){
+									var result = evalBundle(text, checkForLegacyModules, mid);
+									if(result===1){
+										// the bundle was an AMD module; reinject it through the normal AMD path
+										// with browser caching, this should be free
+										require([mid], function(bundle){
+											results.push(cache[url]= bundle);
+										});
+									}else{
+										if(result instanceof Error){
+											console.error("failed to evaluate i18n bundle; url=" + url, result);
+											result = {};
+										}
+										// nls/<locale>/<bundle-name> indicates not the root.
+										results.push(cache[url] = (/nls\/[^\/]+\/[^\/]+$/.test(url) ? result : {root:result, _v1x:1}));
+									}
+								},
+								error:function(){
+									results.push(cache[url]= {});
+								}
+							});
+						}
 					}
 				});
 				callback && callback.apply(null, results);
@@ -200,13 +239,59 @@ define(["./_base/kernel", "require", "./has", "./_base/array", "./_base/config",
 
 			normalizeLocale = thisModule.normalizeLocale= function(locale){
 				var result = locale ? locale.toLowerCase() : dojo.locale;
-				if(result == "root"){
-					result = "ROOT";
-				}
-				return result;
+				return result == "root" ? "ROOT" : result;
 			},
 
-			forEachLocale = function(locale, func){
+			isXd = function(mid){
+				return has("dojo-sync-loader") ? require.isXdUrl(require.toUrl(mid + ".js")) : true;
+			},
+
+			preloading = 0,
+
+			preloadWaitQueue = [];
+
+		checkForLegacyModules = function(target){
+			// legacy code may have already loaded [e.g] the raw bundle x/y/z at x.y.z; when true, push into the cache
+			for(var result, names = target.split("/"), object = dojo.global[names[0]], i = 1; object && i<names.length-1; object = object[names[i++]]){}
+			if(object){
+				result = object[names[i]];
+				if(!result){
+					// fallback for incorrect bundle build of 1.6
+					result = object[names[i].replace(/-/g,"_")];
+				}
+				if(result){
+					cache[target] = result;
+				}
+			}
+			return result;
+		};
+
+		waitForPreloads = function(id, require, load){
+			if(preloading){
+				preloadWaitQueue.push([id, require, load]);
+			}
+			return preloading;
+		};
+
+		thisModule.getLocalization= function(moduleName, bundleName, locale){
+			var result,
+				l10nName= getL10nName(moduleName, bundleName, locale).substring(10);
+			load(l10nName, (!isXd(l10nName) ? syncRequire : require), function(result_){ result= result_; });
+			return result;
+		};
+
+		thisModule._preloadLocalizations = function(/*String*/bundlePrefix, /*Array*/localesGenerated){
+			//	summary:
+			//		Load built, possibly-flattened resource bundles, if available for all
+			//		locales used in the page.
+			//
+			//  descirption:
+			//		Only called by built layer files. The entire locale hierarchy is loaded. For example,
+			//		if locale=="ab-cd", then ROOT, "ab", and "ab-cd" are loaded. This is different than v1.6-
+			//		in that the v1.6- would lonly load ab-cd...which was *always* flattened.
+
+
+			function forEachLocale(locale, func){
 				// this function is equivalent to v1.6 dojo.i18n._searchLocalePath with down===true
 				var parts = locale.split("-");
 				while(parts.length){
@@ -216,47 +301,27 @@ define(["./_base/kernel", "require", "./has", "./_base/array", "./_base/config",
 					parts.pop();
 				}
 				return func("ROOT");
-			};
-
-		checkForLegacyModules = function(target){
-			// legacy code may have already loaded [e.g] the raw bundle x/y/z at x.y.z; when true, push into the cache
-			for(var names = target.split("/"), object = dojo.global[names[0]], i = 1; object && i<names.length; object = object[names[i++]]){}
-			if(object){
-				cache[target] = object;
 			}
-		};
-
-		thisModule.getLocalization= function(moduleName, bundleName, locale){
-			var result,
-				l10nName= getL10nName(moduleName, bundleName, locale).substring(10);
-			load(l10nName, (has("dojo-sync-loader") && !require.isXdUrl(require.toUrl(l10nName + ".js")) ? syncRequire : require), function(result_){ result= result_; });
-			return result;
-		};
-
-		thisModule._preloadLocalizations = function(/*String*/bundlePrefix, /*Array*/localesGenerated){
-			//	summary:
-			//		Load built, flattened resource bundles, if available for all
-			//		locales used in the page. Only called by built layer files.
-			//
-			//  note: this function a direct copy of v1.6 function of same name
 
 			function preload(locale){
 				locale = normalizeLocale(locale);
 				forEachLocale(locale, function(loc){
-					for(var i=0; i<localesGenerated.length;i++){
-						if(localesGenerated[i] == loc){
-							syncRequire([bundlePrefix.replace(/\./g, "/")+"_"+loc]);
-							return true; // Boolean
-						}
+					if(array.indexOf(localesGenerated, loc)>0){
+						var mid = bundlePrefix.replace(/\./g, "/")+"_"+loc;
+						preloading++;
+						(isXd(mid) ? require : syncRequire)([mid], function(){
+							while(!--preloading && preloadWaitQueue.length){
+								load.apply(null, preloadWaitQueue.shift());
+							}
+						});
+						return true; // Boolean
 					}
 					return false; // Boolean
 				});
 			}
+
 			preload();
-			var extra = dojo.config.extraLocale||[];
-			for(var i=0; i<extra.length; i++){
-				preload(extra[i]);
-			}
+			array.forEach(dojo.config.extraLocale, preload);
 		};
 
 		if(has("dojo-unit-tests")){
@@ -264,27 +329,23 @@ define(["./_base/kernel", "require", "./has", "./_base/array", "./_base/config",
 				doh.register("tests.i18n.unit", function(t){
 					var check;
 
-					check = evalBundle("{prop:1}", __evalError);
-					t.is({prop:1}, check[0]); t.is(undefined, check[1]);
+					check = evalBundle("{prop:1}");
+					t.is({prop:1}, check); t.is(undefined, check[1]);
 
-					check = evalBundle("({prop:1})", __evalError);
-					t.is({prop:1}, check[0]); t.is(undefined, check[1]);
+					check = evalBundle("({prop:1})");
+					t.is({prop:1}, check); t.is(undefined, check[1]);
 
-					check = evalBundle("{'prop-x':1}", __evalError);
-					t.is({'prop-x':1}, check[0]); t.is(undefined, check[1]);
+					check = evalBundle("{'prop-x':1}");
+					t.is({'prop-x':1}, check); t.is(undefined, check[1]);
 
-					check = evalBundle("({'prop-x':1})", __evalError);
-					t.is({'prop-x':1}, check[0]); t.is(undefined, check[1]);
+					check = evalBundle("({'prop-x':1})");
+					t.is({'prop-x':1}, check); t.is(undefined, check[1]);
 
-					check = evalBundle("define({'prop-x':1})", __evalError);
-					t.is(0, check[0]); t.is({'prop-x':1}, check[1]);
+					check = evalBundle("define({'prop-x':1})");
+					t.is(1, check);
 
-					check = evalBundle("define({'prop-x':1});", __evalError);
-					t.is(0, check[0]); t.is({'prop-x':1}, check[1]);
-
-					check = evalBundle("this is total nonsense and should throw an error", __evalError);
-					t.is(__evalError, check[0]); t.is(undefined, check[1]);
-					t.is({}, fixup("some/url", check[0], check[1]));
+					check = evalBundle("this is total nonsense and should throw an error");
+					t.is(check instanceof Error, true);
 				});
 			});
 		}

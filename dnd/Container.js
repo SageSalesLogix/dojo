@@ -1,17 +1,23 @@
 define([
 	"../_base/array",
-	"../_base/connect",
 	"../_base/declare",
 	"../_base/event",
 	"../_base/kernel",
 	"../_base/lang",
+	"../_base/window",
 	"../dom",
 	"../dom-class",
 	"../dom-construct",
 	"../Evented",
+	"../has",
+	"../on",
 	"../query",
+	"../ready",
+	"../touch",
 	"./common"
-], function(array, connect, declare, event, kernel, lang, dom, domClass, domConstruct, Evented, query, dnd) {
+], function(
+	array, declare, event, kernel, lang, win,
+	dom, domClass, domConstruct, Evented, has, on, query, ready, touch, dnd) {
 
 // module:
 //		dojo/dnd/Container
@@ -69,6 +75,7 @@ dojo.dnd.Item = function(){
 }
 =====*/
 
+
 var Container = declare("dojo.dnd.Container", Evented, {
 	// summary:
 	//		a Container object, which knows when mouse hovers over it,
@@ -76,7 +83,11 @@ var Container = declare("dojo.dnd.Container", Evented, {
 
 	// object attributes (for markup)
 	skipForm: false,
-
+	// allowNested: Boolean
+	//		Indicates whether to allow dnd item nodes to be nested within other elements.
+	//		By default this is false, indicating that only direct children of the container can
+	//		be draggable dnd item nodes
+	allowNested: false,
 	/*=====
 	// current: DomNode
 	//		The DOM node the mouse is currently hovered over
@@ -116,11 +127,11 @@ var Container = declare("dojo.dnd.Container", Evented, {
 
 		// set up events
 		this.events = [
-			connect.connect(this.node, "onmouseover", this, "onMouseOver"),
-			connect.connect(this.node, "onmouseout",  this, "onMouseOut"),
+			on(this.node, touch.over, lang.hitch(this, "onMouseOver")),
+			on(this.node, touch.out,  lang.hitch(this, "onMouseOut")),
 			// cancel text selection and text dragging
-			connect.connect(this.node, "ondragstart",   this, "onSelectStart"),
-			connect.connect(this.node, "onselectstart", this, "onSelectStart")
+			on(this.node, "dragstart",   lang.hitch(this, "onSelectStart")),
+			on(this.node, "selectstart", lang.hitch(this, "onSelectStart"))
 		];
 	},
 
@@ -168,7 +179,7 @@ var Container = declare("dojo.dnd.Container", Evented, {
 	getAllNodes: function(){
 		// summary:
 		//		returns a list (an array) of all valid child nodes
-		return query("> .dojoDndItem", this.parent);	// NodeList
+		return query((this.allowNested ? "" : "> ") + ".dojoDndItem", this.parent);	// NodeList
 	},
 	sync: function(){
 		// summary:
@@ -219,7 +230,7 @@ var Container = declare("dojo.dnd.Container", Evented, {
 			for(i = 0; i < data.length; ++i){
 				t = this._normalizedCreator(data[i]);
 				this.setItem(t.node.id, {data: t.data, type: t.type});
-				this.parent.insertBefore(t.node, anchor);
+				anchor.parentNode.insertBefore(t.node, anchor);
 			}
 		}else{
 			for(i = 0; i < data.length; ++i){
@@ -233,15 +244,15 @@ var Container = declare("dojo.dnd.Container", Evented, {
 	destroy: function(){
 		// summary:
 		//		prepares this object to be garbage-collected
-		array.forEach(this.events, connect.disconnect);
+		array.forEach(this.events, function(handle){ handle.remove(); });
 		this.clearItems();
 		this.node = this.parent = this.current = null;
 	},
 
 	// markup methods
-	markupFactory: function(params, node, ctor){
+	markupFactory: function(params, node, Ctor){
 		params._skipStartup = true;
-		return new ctor(node, params);
+		return new Ctor(node, params);
 	},
 	startup: function(){
 		// summary:
@@ -265,7 +276,7 @@ var Container = declare("dojo.dnd.Container", Evented, {
 	// mouse events
 	onMouseOver: function(e){
 		// summary:
-		//		event processor for onmouseover
+		//		event processor for onmouseover or touch, to mark that element as the current element
 		// e: Event
 		//		mouse event
 		var n = e.relatedTarget;
@@ -365,7 +376,7 @@ var Container = declare("dojo.dnd.Container", Evented, {
 		var node = e.target;
 		if(node){
 			for(var parent = node.parentNode; parent; node = parent, parent = node.parentNode){
-				if(parent == this.parent && domClass.contains(node, "dojoDndItem")){ return node; }
+				if((parent == this.parent || this.allowNested) && domClass.contains(node, "dojoDndItem")){ return node; }
 			}
 		}
 		return null;
