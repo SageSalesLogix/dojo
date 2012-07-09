@@ -1,5 +1,5 @@
 define([
-	"util/doh/main",
+	"doh/main",
 	"./aspect",
 	"./dom-construct",
 	"./dom-style",
@@ -10,7 +10,7 @@ define([
 	"./robot",
 	"./sniff",
 	"./_base/window"
-], function(doh, aspect, construct, style, kernel, lang, on, ready, robot, has, win) {
+], function(doh, aspect, construct, style, kernel, lang, on, ready, robot, has, win){
 
 kernel.experimental("dojo.robotx");
 
@@ -133,6 +133,10 @@ lang.mixin(robot, {
 
 		kernel.setContext(iframe.contentWindow, iframe.contentWindow.document);
 
+		// Also set pointers inside robot, for easy access via AMD (where there is no dojo variable)
+		robot.window = iframe.contentWindow;
+		robot.doc = iframe.contentWindow.document;
+
 		// TODO: shouldn't this wait until dojo has finished loading in the iframe?  See require code in onIframeLoad().
 		var win = kernel.global;
 		if(win.dojo){
@@ -162,20 +166,17 @@ lang.mixin(robot, {
 		// summary:
 		//		Notifies DOH that the doh.robot is about to make a page change in the application it is driving,
 		//		returning a doh.Deferred object the user should return in their runTest function as part of a DOH test.
-		//
 		// description:
 		//		Notifies DOH that the doh.robot is about to make a page change in the application it is driving,
 		//		returning a doh.Deferred object the user should return in their runTest function as part of a DOH test.
-		//		Example:
-		//			runTest: function(){
-		//				return waitForPageLoad(function(){ doh.robot.keyPress(dojo.keys.ENTER, 500); });
-		//			}
-		//
+		// example:
+		// |	runTest: function(){
+		// |		return waitForPageLoad(function(){ doh.robot.keyPress(dojo.keys.ENTER, 500); });
+		// |	}
 		// submitActions:
 		//		The doh.robot will execute the actions the test passes into the submitActions argument (like clicking the submit button),
 		//		expecting these actions to create a page change (like a form submit).
 		//		After these actions execute and the resulting page loads, the next test will start.
-		//
 
 		var d = new doh.Deferred();
 		// create iframe event handler to track submit progress

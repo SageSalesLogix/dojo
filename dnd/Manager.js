@@ -3,17 +3,10 @@ define([
 	"../dom-class", "../Evented", "../has", "../keys", "../on", "../topic", "../touch",
 	"./common", "./autoscroll", "./Avatar"
 ], function(array, declare, event, lang, win, domClass, Evented, has, keys, on, topic, touch,
-	dnd, autoscroll, Avatar) {
+	dnd, autoscroll, Avatar){
 
 // module:
 //		dojo/dnd/Manager
-// summary:
-//		TODOC
-
-/*=====
-dnd = dojo.dnd;
-Evented = dojo.Evented;
-=====*/
 
 var Manager = declare("dojo.dnd.Manager", [Evented], {
 	// summary:
@@ -70,6 +63,10 @@ var Manager = declare("dojo.dnd.Manager", [Evented], {
 		//		the list of transferred items
 		// copy: Boolean
 		//		copy items, if true, move items otherwise
+
+		// Tell autoscroll that a drag is starting
+		autoscroll.autoScrollStart(win.doc);
+
 		this.source = source;
 		this.nodes  = nodes;
 		this.copy   = Boolean(copy); // normalizing to true boolean
@@ -209,7 +206,7 @@ var Manager = declare("dojo.dnd.Manager", [Evented], {
 	}
 });
 
-// dojo.dnd._manager:
+// dnd._manager:
 //		The manager singleton variable. Can be overwritten if needed.
 dnd._manager = null;
 

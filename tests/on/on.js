@@ -142,10 +142,10 @@ doh.register("tests.on",
 			}
 			// test out event delegation using a custom selector
 			on(div, on.selector(function(node){
-				return node.tagName == "BUTTON" && node;
+				return node.tagName == "BUTTON";
 			}, "click"), function(){
-					order.push(9);
-				}); 
+				order.push(9);
+			});
 			button.click();
 			t.is(order, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
 			on(span, "propertychange", function(){}); // make sure it doesn't throw an error
@@ -250,7 +250,7 @@ doh.register("tests.on",
 		},
 		function eventAugmentation(t){
 			var div = document.body.appendChild(document.createElement("div"));
-			var button = div.appendChild(document.createElement("buton"));
+			var button = div.appendChild(document.createElement("button"));
 			on(button, "click", function(event){
 				event.modified = true;
 				event.test = 3;

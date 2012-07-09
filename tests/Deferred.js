@@ -1,8 +1,8 @@
 define([
-	"doh",
+	"doh/main",
 	"dojo/Deferred",
 	"dojo/promise/Promise",
-	"dojo/promise/CancelError"
+	"dojo/errors/CancelError"
 ], function(doh, Deferred, Promise, CancelError){
 	var tests = {
 		"deferred receives result after resolving": function(t){
@@ -197,25 +197,6 @@ define([
 			this.deferred.resolve();
 			inner.progress(obj);
 			t.t(received === obj);
-		},
-
-		"progress() with lots of chaining": function(t){
-			// Test for <http://bugs.dojotoolkit.org/ticket/14685>
-			var obj = {};
-			var received;
-			var promise = this.deferred.promise;
-			var count = 0;
-			function chain(){
-				count++;
-				return obj;
-			}
-			for(var i = 0; i < 5000; i++){
-				promise = promise.then(chain);
-			}
-			this.deferred.resolve();
-			promise.then(function(result){ received = result; });
-			t.t(received === obj);
-			t.is(count, 5000);
 		},
 
 		"progress() is already bound to the deferred": function(t){

@@ -1,20 +1,16 @@
-define(["./_base/kernel", "./_base/lang"], function(dojo, lang) {
-	// module:
-	//		dojo/regexp
+define(["./_base/kernel", "./_base/lang"], function(dojo, lang){
+
+// module:
+//		dojo/regexp
+
+var regexp = {
 	// summary:
-	//		TODOC
-
-var regexp = lang.getObject("dojo.regexp", true);
-
-/*=====
-dojo.regexp = {
-	// summary: Regular expressions and Builder resources
+	//		Regular expressions and Builder resources
 };
-regexp = dojo.regexp;
-=====*/
+lang.setObject("dojo.regexp", regexp);
 
 regexp.escapeString = function(/*String*/str, /*String?*/except){
-	//	summary:
+	// summary:
 	//		Adds escape sequences for special characters in regular expressions
 	// except:
 	//		a String with special characters to be left unescaped
@@ -28,9 +24,9 @@ regexp.escapeString = function(/*String*/str, /*String?*/except){
 };
 
 regexp.buildGroupRE = function(/*Object|Array*/arr, /*Function*/re, /*Boolean?*/nonCapture){
-	//	summary:
+	// summary:
 	//		Builds a regular expression that groups subexpressions
-	//	description:
+	// description:
 	//		A utility function used by some of the RE generators. The
 	//		subexpressions are constructed by the function, re, in the second
 	//		parameter.  re builds one subexpression for each elem in the array

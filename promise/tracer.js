@@ -7,12 +7,17 @@ define([
 
 	// module:
 	//		dojo/promise/tracer
-	// summary:
-	//		Trace promise fulfillment.
-	// description:
-	//		Trace promise fulfillment. Calling `.trace()` or `.traceError()` on a
-	//		promise enables tracing. Will emit `resolved`, `rejected` or `progress`
-	//		events.
+
+	/*=====
+	return {
+		// summary:
+		//		Trace promise fulfillment.
+		// description:
+		//		Trace promise fulfillment. Calling `.trace()` or `.traceError()` on a
+		//		promise enables tracing. Will emit `resolved`, `rejected` or `progress`
+		//		events.
+	};
+	=====*/
 
 	var evented = new Evented;
 	var emit = evented.emit;
@@ -36,7 +41,7 @@ define([
 
 	Promise.prototype.traceRejected = function(){
 		var args = lang._toArray(arguments);
-		this.fail(function(error){
+		this.otherwise(function(error){
 			emitAsync(["rejected", error].concat(args));
 		});
 		return this;

@@ -46,8 +46,12 @@
 					"doh.is(1, (query('.foo.bar')).length);",
 					"doh.is(2, (query('.baz')).length);",
 					"doh.is(3, (query('#t > h3')).length);",
+					
+					// this fails on IE8 because qSA completely fails on unknown elements. not sure how to fix this other than completely disable qSA on IE8, which would be an unacceptable performance regression
+					//"doh.t(query.matches(query('section')[0],'section'));",
 
 					"doh.is(2, (query('#baz,#foo,#t')).length);",
+					"doh.is(0, (query(null)).length);",
 
 					//"doh.is(1, (query('#bug')).length);",
 
@@ -57,6 +61,7 @@
 
 					// with a root, by ID
 					"doh.is(3, (query('> *', 'container')).length);",
+					"doh.is(3, (query('> *, > h3', 'container')).length);",
 					"doh.is(3, (query('> h3', 't')).length);",
 
 					// compound queries
@@ -72,7 +77,8 @@
 					"doh.is(1, (query('span.baz')).length);",
 					"doh.is(1, (query('sPaN.baz')).length);",
 					"doh.is(1, (query('SPAN.baz')).length);",
-
+					"doh.is(1, query('.fooBar').length);",
+					
 					// attribute selectors
 					"doh.is(3, (query('[foo]')).length);",
 
@@ -85,8 +91,7 @@
 					"doh.is(0, (query('#t span[title$=thud ]')).length);",
 					"doh.is(1, (query('[id$=\\'55555\\']')).length);",
 					"doh.is(2, (query('[foo~=\"bar\"]')).length);",
-					// TODO: uncomment when #14877 fixed
-					// "doh.is(2, (query('[ foo ~= \"bar\" ]')).length);",
+					"doh.is(2, (query('[ foo ~= \"bar\" ]')).length);",
 					"doh.is(2, (query('[foo|=\"bar\"]')).length);",
 					"doh.is(1, (query('[foo|=\"bar-baz\"]')).length);",
 					"doh.is(0, (query('[foo|=\"baz\"]')).length);",
@@ -120,25 +125,21 @@
 					'doh.is(1, query(\'option[value="a+b"]\', "attrSpecialChars").length);',
 					'doh.is(1, query(\'option[value="a~b"]\', "attrSpecialChars").length);',
 					'doh.is(1, query(\'option[value="a^b"]\', "attrSpecialChars").length);',
-					// TODO: enable when #14877 is fixed on IE
-					// 'doh.is(1, query(\'option[value="a,b"]\', "attrSpecialChars").length);',
+					'doh.is(1, query(\'option[value="a,b"]\', "attrSpecialChars").length);',
 
 					// selector with substring that contains equals sign (bug 7479)
 					"doh.is(1, query(\"a[href*='foo=bar']\", 'attrSpecialChars').length);",
 
 					// selector with substring that contains brackets (bug 9193, 11189, 13084)
-					// TODO: enable when #14877 is fixed on IE
-					// 'doh.is(1, query(\'input[name="data[foo][bar]"]\', "attrSpecialChars").length);',
-					// 'doh.is(1, query(\'input[name="foo[0].bar"]\', "attrSpecialChars").length);',
-					// 'doh.is(1, query(\'input[name="test[0]"]\', "attrSpecialChars").length);',
+					'doh.is(1, query(\'input[name="data[foo][bar]"]\', "attrSpecialChars").length);',
+					'doh.is(1, query(\'input[name="foo[0].bar"]\', "attrSpecialChars").length);',
+					'doh.is(1, query(\'input[name="test[0]"]\', "attrSpecialChars").length);',
 
 					// escaping special characters with backslashes (http://www.w3.org/TR/CSS21/syndata.html#characters)
 					// selector with substring that contains brackets (bug 9193, 11189, 13084)
 					// eval() converts 4 backslashes --> 1 by the time dojo.query() sees the string
-					// TODO: enable when #14877 is fixed on IE
-					// 'doh.is(1, query("input[name=data\\\\[foo\\\\]\\\\[bar\\\\]]", "attrSpecialChars").length);',
-					// TODO: uncomment when #14876 is fixed
-					// 'doh.is(1, query("input[name=foo\\\\[0\\\\]\\\\.bar]", "attrSpecialChars").length);',
+					'doh.is(1, query("input[name=data\\\\[foo\\\\]\\\\[bar\\\\]]", "attrSpecialChars").length);',
+					'doh.is(1, query("input[name=foo\\\\[0\\\\]\\\\.bar]", "attrSpecialChars").length);',
 
 					// cross-document queries
 					{
@@ -168,8 +169,8 @@
 					// escaping of ":" chars inside an ID
 					function silly_IDs1(){
 						doh.t(document.getElementById("silly:id::with:colons"), "getElementById");
-						// TODO: uncomment when #14877 is fixed on Ie
-						// doh.is(1, query("#silly\\:id\\:\\:with\\:colons").length, "query(\"#silly\\:id\\:\\:with\\:colons\")");
+						doh.is(1, query("#silly\\:id\\:\\:with\\:colons").length, "query(\"#silly\\:id\\:\\:with\\:colons\")");
+						doh.is(1, dojo.query("#silly\\~id").length);
 					},
 					function NodeList_identity(){
 						var foo = new dojo.NodeList([dojo.byId("container")]);
@@ -180,7 +181,7 @@
 							"<ResultSet>",
 							"<Result>One</Result>",
 							"<RESULT>Two</RESULT>",
-							"<result>Three</result>",
+							"<result><nested>Three</nested></result>",
 							"<result>Four</result>",
 							"</ResultSet>"
 						].join("")
@@ -188,6 +189,8 @@
 						var de = doc.documentElement;
 
 						doh.is(2, query("result", de).length, "all lower");
+
+						//doh.is(1, query("result>nested", de).length, "nested XML");
 						doh.is(1, query("Result", de).length, "mixed case");
 						doh.is(1, query("RESULT", de).length, "all upper");
 						doh.is(0, query("resulT", de).length, "no match");
@@ -283,7 +286,14 @@
 						"doh.is(2, query('#t2 > :checked').length);",
 						"doh.is(dojo.byId('checkbox2'), query('#t2 > input[type=checkbox]:checked')[0]);",
 						"doh.is(dojo.byId('radio2'), query('#t2 > input[type=radio]:checked')[0]);",
-						"doh.is(2, query('#t2select option:checked').length);",
+						// This :checked selector is only defined for elements that have the checked property, option elements are not specified by the spec (http://www.w3.org/TR/css3-selectors/#checked) and not universally supported 
+						//"doh.is(2, query('#t2select option:checked').length);",
+
+						"doh.is(1, query('#radio1:disabled').length);",
+						"doh.is(0, query('#radio1:enabled').length);",
+						"doh.is(0, query('#radio2:disabled').length);",
+						"doh.is(1, query('#radio2:enabled').length);",
+
 
 						// :empty pseudo-selector
 						"doh.is(4, query('#t > span:empty').length);",
@@ -382,7 +392,7 @@
 				<div id="child2"></div>
 				<div id="child3" qux="true"></div>
 			</div>
-			<div qux="true"></div>
+			<div id="silly~id" qux="true"></div>
 			<input id="notbug" name="bug" type="hidden" value="failed"> 
 			<input id="bug" type="hidden" value="passed"> 
 		</div>
@@ -390,7 +400,7 @@
 			<input type="checkbox" name="checkbox1" id="checkbox1" value="foo">
 			<input type="checkbox" name="checkbox2" id="checkbox2" value="bar" checked>
 
-			<input type="radio" name="radio" id="radio1" value="thinger">
+			<input type="radio" disabled="true" name="radio" id="radio1" value="thinger">
 			<input type="radio" name="radio" id="radio2" value="stuff" checked>
 			<input type="radio" name="radio" id="radio3" value="blah">
 		</div>
@@ -409,6 +419,7 @@
 				</div>
 			</div>
 		</div>
+		<section></section>
 		<div id='other'>
 		  <div id='abc55555'></div>
 		  <div id='abd55555efg'></div>

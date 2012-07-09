@@ -1,15 +1,13 @@
-define(["./_base/lang", "./sniff"], function(lang, has) {
+define(["./_base/lang", "./sniff"], function(lang, has){
 
 // module:
 //		dojo/gears
-// summary:
-//		TODOC
 
-var gears = lang.getObject("dojo.gears", true);
-
-/*=====
-var gears = dojo.gears;
-=====*/
+var gears = {
+	// summary:
+	//		TODOC
+};
+lang.setObject("dojo.gears", gears);
 
 gears._gearsObject = function(){
 	// summary:
@@ -51,15 +49,17 @@ gears._gearsObject = function(){
 	return lang.getObject("google.gears");
 };
 
-/*=====
-dojo.gears.available = {
-	// summary: True if client is using Google Gears
-};
-=====*/
+
 // see if we have Google Gears installed, and if
 // so, make it available in the runtime environment
 // and in the Google standard 'google.gears' global object
 gears.available = (!!gears._gearsObject())||0;
+/*=====
+ gears.available = {
+ // summary:
+ //		True if client is using Google Gears
+ };
+ =====*/
 
 return gears;
 });

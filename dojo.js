@@ -17,9 +17,9 @@
 	//
 	//		This loader includes sniffing machinery to determine the environment; the following environments are supported:
 	//
-	//			* browser
-	//			* node.js
-	//			* rhino
+	//		- browser
+	//		- node.js
+	//		- rhino
 	//
 	//		This is the so-called "source loader". As such, it includes many optional features that may be discadred by
 	//		building a customized verion with the build system.
@@ -239,10 +239,9 @@
 			// in legacy sync mode, the loader needs a minimal XHR library to load dojo/_base/loader and dojo/_base/xhr
 
 			var locationProtocol = location.protocol,
-				locationHost = location.host,
-				fileProtocol = !locationHost;
+				locationHost = location.host;
 			req.isXdUrl = function(url){
-				if(fileProtocol || /^\./.test(url)){
+				if(/^\./.test(url)){
 					// begins with a dot is always relative to page URL; therefore not xdomain
 					return false;
 				}
@@ -251,9 +250,12 @@
 					return true;
 				}
 				// get protocol and host
-				var match = url.match(/^([^\/\:]+\:)\/\/([^\/]+)/);
-				return match && (match[1] != locationProtocol || match[2] != locationHost);
+				// \/+ takes care of the typical file protocol that looks like file:///drive/path/to/file
+				// locationHost is falsy if file protocol => if locationProtocol matches and is "file:", || will return false
+				var match = url.match(/^([^\/\:]+\:)\/+([^\/]+)/);
+				return match && (match[1] != locationProtocol || (locationHost && match[2] != locationHost));
 			};
+
 
 			// note: to get the file:// protocol to work in FF, you must set security.fileuri.strict_origin_policy to false in about:config
 			has.add("dojo-xhr-factory", 1);
@@ -391,14 +393,14 @@
 			// Modules go through several phases in creation:
 			//
 			// 1. Requested: some other module's definition or a require application contained the requested module in
-			//    its dependency vector or executing code explicitly demands a module via req.require.
+			//	  its dependency vector or executing code explicitly demands a module via req.require.
 			//
 			// 2. Injected: a script element has been appended to the insert-point element demanding the resource implied by the URL
 			//
 			// 3. Loaded: the resource injected in [2] has been evalated.
 			//
 			// 4. Defined: the resource contained a define statement that advised the loader about the module. Notice that some
-			//    resources may just contain a bundle of code and never formally define a module via define
+			//	  resources may just contain a bundle of code and never formally define a module via define
 			//
 			// 5. Evaluated: the module was defined via define and the loader has evaluated the factory and computed a result.
 			= {},
@@ -430,13 +432,20 @@
 
 	if(has("dojo-config-api")){
 		var consumePendingCacheInsert = function(referenceModule){
-				for(var p in pendingCacheInsert){
-					var match = p.match(/^url\:(.+)/);
+				var p, item, match, now;
+				for(p in pendingCacheInsert){
+					item = pendingCacheInsert[p];
+					match = p.match(/^url\:(.+)/);
 					if(match){
-						cache[toUrl(match[1], referenceModule)] =  pendingCacheInsert[p];
+						cache[toUrl(match[1], referenceModule)] =  item;
+					}else if(p=="*now"){
+						now = item;
 					}else if(p!="*noref"){
-						cache[getModuleInfo(p, referenceModule).mid] = pendingCacheInsert[p];
+						cache[getModuleInfo(p, referenceModule).mid] = item;
 					}
+				}
+				if(now){
+					now(createRequire(referenceModule));
 				}
 				pendingCacheInsert = {};
 			},
@@ -575,28 +584,39 @@
 			};
 
 		//
-		// execute the various sniffs
+		// execute the various sniffs; userConfig can override and value
 		//
 
 		if(has("dojo-cdn") || has("dojo-sniff")){
-			for(var dojoDir, src, match, scripts = doc.getElementsByTagName("script"), i = 0; i < scripts.length && !match; i++){
-				if((src = scripts[i].getAttribute("src")) && (match = src.match(/(.*)\/?dojo\.js(\W|$)/i))){
-					// if baseUrl wasn't explicitly set, set it here to the dojo directory; this is the 1.6- behavior
-					// set in defaultConfig which allow user config to override
-					dojoDir = match[1];
+			// the sniff regex looks for a src attribute ending in dojo.js, optionally preceeded with a path.
+			// match[3] returns the path to dojo.js (if any) without the trailing slash. This is used for the
+			// dojo location on CDN deployments and baseUrl when either/both of these are not provided
+			// explicitly in the config data; this is the 1.6- behavior.
+
+			var scripts = doc.getElementsByTagName("script"),
+				i = 0,
+				script, dojoDir, src, match;
+			while(i < scripts.length){
+				script = scripts[i++];
+				if((src = script.getAttribute("src")) && (match = src.match(/(((.*)\/)|^)dojo\.js(\W|$)/i))){
+					// sniff dojoDir and baseUrl
+					dojoDir = match[3] || "";
 					defaultConfig.baseUrl = defaultConfig.baseUrl || dojoDir;
 
-					// see if there's a dojo configuration stuffed into the node
-					src = (scripts[i].getAttribute("data-dojo-config") || scripts[i].getAttribute("djConfig"));
+					// sniff configuration on attribute in script element
+					src = (script.getAttribute("data-dojo-config") || script.getAttribute("djConfig"));
 					if(src){
 						dojoSniffConfig = req.eval("({ " + src + " })", "data-dojo-config");
 					}
+
+					// sniff requirejs attribute
 					if(has("dojo-requirejs-api")){
-						var dataMain = scripts[i].getAttribute("data-main");
+						var dataMain = script.getAttribute("data-main");
 						if(dataMain){
 							dojoSniffConfig.deps = dojoSniffConfig.deps || [dataMain];
 						}
 					}
+					break;
 				}
 			}
 		}
@@ -615,9 +635,12 @@
 		req.rawConfig = {};
 		config(defaultConfig, 1);
 
-		// do this before setting userConfig to allow userConfig to override
+		// do this before setting userConfig/sniffConfig to allow userConfig/sniff overrides
 		if(has("dojo-cdn")){
 			packs.dojo.location = dojoDir;
+			if(dojoDir){
+				dojoDir += "/";
+			}
 			packs.dijit.location = dojoDir + "../dijit/";
 			packs.dojox.location = dojoDir + "../dojox/";
 		}
@@ -656,10 +679,10 @@
 			checkCompleteGuard++;
 			forEach(module.deps, injectModule);
 			if(has("dojo-combo-api") && comboPending && !comboPendingTimer){
-				comboPendingTimer = setTimeout(function() {
+				comboPendingTimer = setTimeout(function(){
 					comboPending = 0;
 					comboPendingTimer = null;
-					req.combo.done(function(mids, url) {
+					req.combo.done(function(mids, url){
 						var onLoadCallback= function(){
 							// defQ is a vector of module definitions 1-to-1, onto mids
 							runDefQ(0, mids);
@@ -703,9 +726,6 @@
 					// resolve the request list with respect to the reference module
 					for(var mid, deps = [], i = 0; i < a1.length;){
 						mid = a1[i++];
-						if(mid in {exports:1, module:1}){
-							throw makeError("illegalModuleId", mid);
-						}
 						deps.push(getModule(mid, referenceModule));
 					}
 
@@ -858,7 +878,7 @@
 		getModuleInfo_ = function(mid, referenceModule, packs, modules, baseUrl, packageMapProg, pathsMapProg, alwaysCreate){
 			// arguments are passed instead of using lexical variables so that this function my be used independent of the loader (e.g., the builder)
 			// alwaysCreate is useful in this case so that getModuleInfo never returns references to real modules owned by the loader
-			var pid, pack, midInPackage, mapProg, mapItem, path, url, result, isRelative, requestedMid, cacheId=0;
+			var pid, pack, midInPackage, mapProg, mapItem, url, result, isRelative, requestedMid, cacheId=0;
 			requestedMid = mid;
 			isRelative = /^\./.test(mid);
 			if(/(^\/)|(\:)|(\.js$)/.test(mid) || (isRelative && !referenceModule)){
@@ -989,15 +1009,14 @@
 		},
 
 		toUrl = req.toUrl = function(name, referenceModule){
-			// name must include a filetype; fault tolerate to allow no filetype (but things like "path/to/version2.13" will assume filetype of ".13")
-			var	match = name.match(/(.+)(\.[^\/\.]+?)$/),
-				root = (match && match[1]) || name,
-				ext = (match && match[2]) || "",
-				moduleInfo = getModuleInfo(root, referenceModule),
-				url= moduleInfo.url;
-			// recall, getModuleInfo always returns a url with a ".js" suffix iff pid; therefore, we've got to trim it
-			url= typeof moduleInfo.pid == "string" ? url.substring(0, url.length - 3) : url;
-			return fixupUrl(url + ext);
+			var moduleInfo = getModuleInfo(name+"/x", referenceModule),
+				url = moduleInfo.url;
+			return fixupUrl(moduleInfo.pid===0 ?
+				// if pid===0, then name had a protocol or absolute path; either way, toUrl is the identify function in such cases
+				name :
+				// "/x.js" since getModuleInfo automatically appends ".js" and we appended "/x" to make name look likde a module id
+				url.substring(0, url.length-5)
+			);
 		},
 
 		nonModuleProps = {
@@ -1054,8 +1073,7 @@
 			var map = {};
 			forEach(plugin.loadQ, function(pseudoPluginResource){
 				// manufacture and insert the real module in modules
-				var pseudoMid = pseudoPluginResource.mid,
-					prid = resolvePluginResourceId(plugin, pseudoPluginResource.prid, pseudoPluginResource.req.module),
+				var prid = resolvePluginResourceId(plugin, pseudoPluginResource.prid, pseudoPluginResource.req.module),
 					mid = plugin.dynamic ? pseudoPluginResource.mid.replace(/waitingForPlugin$/, prid) : (plugin.mid + "!" + prid),
 					pluginResource = mix(mix({}, pseudoPluginResource), {mid:mid, prid:prid, injected:0});
 				if(!modules[mid]){
@@ -1105,7 +1123,7 @@
 				}
 			}
 			// delete references to synthetic modules
-	        if (/^require\*/.test(module.mid)) {
+	        if (/^require\*/.test(module.mid)){
 	            delete modules[module.mid];
 	        }
 		},
@@ -1115,7 +1133,7 @@
 		execModule = function(module, strict){
 			// run the dependency vector, then run the factory for module
 			if(module.executed === executing){
-				req.trace("loader-circular-dependency", [circleTrace.concat(mid).join("->")]);
+				req.trace("loader-circular-dependency", [circleTrace.concat(module.mid).join("->")]);
 				return (!module.def || strict) ? abortExec :  (module.cjs && module.cjs.exports);
 			}
 			// at this point the module is either not executed or fully executed
@@ -1159,10 +1177,10 @@
 				}
 				runFactory(module, args);
 				finishExec(module);
+				has("dojo-trace-api") && circleTrace.pop();
 			}
 			// at this point the module is guaranteed fully executed
 
-			has("dojo-trace-api") && circleTrace.pop();
 			return module.result;
 		},
 
@@ -1249,16 +1267,9 @@
 					// dependencies of some other module because this may cause circles when the plugin
 					// loadQ is run; also, generally, we want plugins to run early since they may load
 					// several other modules and therefore can potentially unblock many modules
+					plugin.loadQ = [module];
 					execQ.unshift(plugin);
 					injectModule(plugin);
-
-					// maybe the module was cached and is now defined...
-					if(plugin.load){
-						plugin.load(module.prid, module.req, onLoad);
-					}else{
-						// nope; queue up the plugin resource to be loaded after the plugin module is loaded
-						plugin.loadQ = [module];
-					}
 				}
 			},
 
@@ -1272,6 +1283,9 @@
 
 			evalModuleText = function(text, module){
 				// see def() for the injectingCachedModule bracket; it simply causes a short, safe curcuit
+				if(has("config-stripStrict")){
+					text = text.replace(/"use strict"/g, '');
+				}
 				injectingCachedModule = 1;
 				if(has("config-dojo-loader-catches")){
 					try{
@@ -1495,7 +1509,6 @@
 			runDefQ = function(referenceModule, mids){
 				// defQ is an array of [id, dependencies, factory]
 				// mids (if any) is a vector of mids given by a combo service
-				consumePendingCacheInsert(referenceModule);
 				var definedModules = [],
 					module, args;
 				while(defQ.length){
@@ -1504,10 +1517,13 @@
 					// explicit define indicates possible multiple modules in a single file; delay injecting dependencies until defQ fully
 					// processed since modules earlier in the queue depend on already-arrived modules that are later in the queue
 					// TODO: what if no args[0] and no referenceModule
-					module = args[0] && getModule(args[0]) || referenceModule;
-					definedModules.push(defineModule(module, args[1], args[2]));
+					module = (args[0] && getModule(args[0])) || referenceModule;
+					definedModules.push([module, args[1], args[2]]);
 				}
-				forEach(definedModules, injectDependencies);
+				consumePendingCacheInsert(referenceModule);
+				forEach(definedModules, function(args){
+					injectDependencies(defineModule.apply(null, args));
+				});
 			};
 	}
 
@@ -1664,25 +1680,25 @@
 		// CommonJS factory scan courtesy of http://requirejs.org
 
 		var arity = arguments.length,
-			args = 0,
-			defaultDeps = ["require", "exports", "module"];
-
-		if(has("dojo-amd-factory-scan")){
-			if(arity == 1 && isFunction(mid)){
-				dependencies = [];
-				mid.toString()
-					.replace(/(\/\*([\s\S]*?)\*\/|\/\/(.*)$)/mg, "")
-					.replace(/require\(["']([\w\!\-_\.\/]+)["']\)/g, function (match, dep){
-					dependencies.push(dep);
-				});
-				args = [0, defaultDeps.concat(dependencies), mid];
-			}
-			}
-		if(!args){
-			args = arity == 1 ? [0, defaultDeps, mid] :
-				(arity == 2 ? (isArray(mid) ? [0, mid, dependencies] : (isFunction(dependencies) ? [mid, defaultDeps, dependencies] : [mid, [], dependencies])) :
-					[mid, dependencies, factory]);
+			defaultDeps = ["require", "exports", "module"],
+			// the predominate signature...
+			args = [0, mid, dependencies];
+		if(arity==1){
+			args = [0, (isFunction(mid) ? defaultDeps : []), mid];
+		}else if(arity==2 && isString(mid)){
+			args = [mid, (isFunction(dependencies) ? defaultDeps : []), dependencies];
+		}else if(arity==3){
+			args = [mid, dependencies, factory];
 		}
+
+		if(has("dojo-amd-factory-scan") && args[1]===defaultDeps){
+			args[2].toString()
+				.replace(/(\/\*([\s\S]*?)\*\/|\/\/(.*)$)/mg, "")
+				.replace(/require\(["']([\w\!\-_\.\/]+)["']\)/g, function(match, dep){
+				args[1].push(dep);
+			});
+		}
+
 		req.trace("loader-define", args.slice(0, 2));
 		var targetModule = args[0] && getModule(args[0]),
 			module;
@@ -1799,9 +1815,13 @@
 		if(has("dojo-log-api")){
 			signal(error, makeError("defineAlreadyDefined", 0));
 		}
+		return;
 	}else{
 		global.define = def;
 		global.require = req;
+		if(has("host-node")){
+			require= req;
+		}
 	}
 
 	if(has("dojo-combo-api") && req.combo && req.combo.plugins){
@@ -1849,6 +1869,8 @@
 			"dojo-sniff":1,
 			"dojo-sync-loader":1,
 			"dojo-test-sniff":1,
+			"config-useDeferredInstrumentation":1,
+			"config-deferredInstrumentation":"report-unhandled-rejections",
 			"config-tlmSiblingOfDojo":1
 		},
 		packages:[{

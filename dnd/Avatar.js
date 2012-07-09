@@ -5,14 +5,12 @@ define([
 	"../dom-attr",
 	"../dom-class",
 	"../dom-construct",
+	"../hccss",
 	"../query"
-], function(declare, win, dom, domAttr, domClass, domConstruct, query) {
+], function(declare, win, dom, domAttr, domClass, domConstruct, has, query){
 
 // module:
 //		dojo/dnd/Avatar
-// summary:
-//		TODOC
-
 
 return declare("dojo.dnd.Avatar", null, {
 	// summary:
@@ -30,7 +28,7 @@ return declare("dojo.dnd.Avatar", null, {
 		// summary:
 		//		constructor function;
 		//		it is separate so it can be (dynamically) overwritten in case of need
-		this.isA11y = domClass.contains(win.body(),"dijit_a11y");
+
 		var a = domConstruct.create("table", {
 				"class": "dojoDndAvatar",
 				style: {
@@ -43,14 +41,18 @@ return declare("dojo.dnd.Avatar", null, {
 			b = domConstruct.create("tbody", null, a),
 			tr = domConstruct.create("tr", null, b),
 			td = domConstruct.create("td", null, tr),
-			icon = this.isA11y ? domConstruct.create("span", {
-						id : "a11yIcon",
-						innerHTML : this.manager.copy ? '+' : "<"
-					}, td) : null,
-			span = domConstruct.create("span", {
-				innerHTML: source.generateText ? this._generateText() : ""
-			}, td),
 			k = Math.min(5, this.manager.nodes.length), i = 0;
+
+		if(has("highcontrast")){
+			domConstruct.create("span", {
+				id : "a11yIcon",
+				innerHTML : this.manager.copy ? '+' : "<"
+			}, td)
+		}
+		domConstruct.create("span", {
+			innerHTML: source.generateText ? this._generateText() : ""
+		}, td);
+
 		// we have to set the opacity on IE only after the node is live
 		domAttr.set(tr, {
 			"class": "dojoDndAvatarHeader",
@@ -92,12 +94,12 @@ return declare("dojo.dnd.Avatar", null, {
 		// summary:
 		//		updates the avatar to reflect the current DnD state
 		domClass.toggle(this.node, "dojoDndAvatarCanDrop", this.manager.canDropFlag);
-		if (this.isA11y){
+		if(has("highcontrast")){
 			var icon = dom.byId("a11yIcon");
 			var text = '+';   // assume canDrop && copy
-			if (this.manager.canDropFlag && !this.manager.copy) {
+			if (this.manager.canDropFlag && !this.manager.copy){
 				text = '< '; // canDrop && move
-			}else if (!this.manager.canDropFlag && !this.manager.copy) {
+			}else if (!this.manager.canDropFlag && !this.manager.copy){
 				text = "o"; //!canDrop && move
 			}else if(!this.manager.canDropFlag){
 				text = 'x';  // !canDrop && copy
@@ -105,13 +107,14 @@ return declare("dojo.dnd.Avatar", null, {
 			icon.innerHTML=text;
 		}
 		// replace text
-		query(("tr.dojoDndAvatarHeader td span" +(this.isA11y ? " span" : "")), this.node).forEach(
+		query(("tr.dojoDndAvatarHeader td span" +(has("highcontrast") ? " span" : "")), this.node).forEach(
 			function(node){
 				node.innerHTML = this.manager.source.generateText ? this._generateText() : "";
 			}, this);
 	},
 	_generateText: function(){
-		// summary: generates a proper text to reflect copying or moving of items
+		// summary:
+		//		generates a proper text to reflect copying or moving of items
 		return this.manager.nodes.length.toString();
 	}
 });

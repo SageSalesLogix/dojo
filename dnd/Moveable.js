@@ -1,51 +1,25 @@
 define([
 	"../_base/array", "../_base/declare", "../_base/event", "../_base/lang",
 	"../dom", "../dom-class", "../Evented", "../on", "../topic", "../touch", "./common", "./Mover", "../_base/window"
-], function(array, declare, event, lang, dom, domClass, Evented, on, topic, touch, dnd, Mover, win) {
+], function(array, declare, event, lang, dom, domClass, Evented, on, topic, touch, dnd, Mover, win){
 
 // module:
 //		dojo/dnd/Moveable
-// summary:
-//		TODOC
 
-/*=====
-Mover = dojo.dnd.Mover;
-Evented = dojo.Evented;
-=====*/
 
-/*=====
-declare("dojo.dnd.__MoveableArgs", [], {
-	// handle: Node||String
-	//		A node (or node's id), which is used as a mouse handle.
-	//		If omitted, the node itself is used as a handle.
-	handle: null,
+var Moveable = declare("dojo.dnd.Moveable", [Evented], {
+	// summary:
+	//		an object, which makes a node movable
 
-	// delay: Number
-	//		delay move by this number of pixels
-	delay: 0,
-
-	// skip: Boolean
-	//		skip move of form elements
-	skip: false,
-
-	// mover: Object
-	//		a constructor of custom Mover
-	mover: dojo.dnd.Mover
-});
-=====*/
-
-return declare("dojo.dnd.Moveable", [Evented], {
 	// object attributes (for markup)
 	handle: "",
 	delay: 0,
 	skip: false,
 
 	constructor: function(node, params){
-		// summary:
-		//		an object, which makes a node moveable
 		// node: Node
 		//		a node (or node's id) to be moved
-		// params: dojo.dnd.__MoveableArgs?
+		// params: Moveable.__MoveableArgs?
 		//		optional parameters
 		this.node = dom.byId(node);
 		if(!params){ params = {}; }
@@ -126,20 +100,20 @@ return declare("dojo.dnd.Moveable", [Evented], {
 	},
 
 	// local events
-	onDragDetected: function(/* Event */ e){
+	onDragDetected: function(/*Event*/ e){
 		// summary:
 		//		called when the drag is detected;
 		//		responsible for creation of the mover
 		new this.mover(this.node, e, this);
 	},
-	onMoveStart: function(/* dojo.dnd.Mover */ mover){
+	onMoveStart: function(/*Mover*/ mover){
 		// summary:
 		//		called before every move operation
 		topic.publish("/dnd/move/start", mover);
 		domClass.add(win.body(), "dojoMove");
 		domClass.add(this.node, "dojoMoveItem");
 	},
-	onMoveStop: function(/* dojo.dnd.Mover */ mover){
+	onMoveStop: function(/*Mover*/ mover){
 		// summary:
 		//		called after every move operation
 		topic.publish("/dnd/move/stop", mover);
@@ -150,7 +124,7 @@ return declare("dojo.dnd.Moveable", [Evented], {
 		// summary:
 		//		called during the very first move notification;
 		//		can be used to initialize coordinates, can be overwritten.
-		// mover: dojo.dnd.Mover
+		// mover: Mover
 		// e: Event
 
 		// default implementation does nothing
@@ -159,7 +133,7 @@ return declare("dojo.dnd.Moveable", [Evented], {
 		// summary:
 		//		called during every move notification;
 		//		should actually move the node; can be overwritten.
-		// mover: dojo.dnd.Mover
+		// mover: Mover
 		// leftTop: Object
 		// e: Event
 		this.onMoving(mover, leftTop);
@@ -171,7 +145,7 @@ return declare("dojo.dnd.Moveable", [Evented], {
 	onMoving: function(/*===== mover, leftTop =====*/){
 		// summary:
 		//		called before every incremental move; can be overwritten.
-		// mover: dojo.dnd.Mover
+		// mover: Mover
 		// leftTop: Object
 
 		// default implementation does nothing
@@ -179,11 +153,33 @@ return declare("dojo.dnd.Moveable", [Evented], {
 	onMoved: function(/*===== mover, leftTop =====*/){
 		// summary:
 		//		called after every incremental move; can be overwritten.
-		// mover: dojo.dnd.Mover
+		// mover: Mover
 		// leftTop: Object
 
 		// default implementation does nothing
 	}
 });
 
+/*=====
+Moveable.__MoveableArgs = declare([], {
+	// handle: Node||String
+	//		A node (or node's id), which is used as a mouse handle.
+	//		If omitted, the node itself is used as a handle.
+	handle: null,
+
+	// delay: Number
+	//		delay move by this number of pixels
+	delay: 0,
+
+	// skip: Boolean
+	//		skip move of form elements
+	skip: false,
+
+	// mover: Object
+	//		a constructor of custom Mover
+	mover: dnd.Mover
+});
+=====*/
+
+return Moveable;
 });

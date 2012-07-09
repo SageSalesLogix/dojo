@@ -1,74 +1,83 @@
 define([
 	'require',
+	'../errors/RequestError',
 	'./watch',
 	'./handlers',
 	'./util',
 	'../has'
-], function(require, watch, handlers, util, has){
-	has.add('native-xhr', function() {
+], function(require, RequestError, watch, handlers, util, has){
+	has.add('native-xhr', function(){
 		// if true, the environment has a native XHR implementation
 		return typeof XMLHttpRequest !== 'undefined';
+	});
+	has.add('dojo-force-activex-xhr', function(){
+		return has('activex') && !document.addEventListener && window.location.protocol === 'file:';
 	});
 
 	has.add('native-xhr2', function(){
 		if(!has('native-xhr')){ return; }
 		var x = new XMLHttpRequest();
-		return typeof x['addEventListener'] != 'undefined';
+		return typeof x['addEventListener'] !== 'undefined' &&
+			(typeof opera === 'undefined' || typeof x['upload'] !== 'undefined');
 	});
 
-	function _resHandle(dfd, response){
-		var _xhr = response.xhr;
-		if(util.checkStatus(_xhr.status)){
-			dfd.resolve(response);
-		}else{
-			var err = new Error('Unable to load ' + response.url + ' status: ' + _xhr.status);
-			err.log = false;
+	has.add('native-formdata', function(){
+		// if true, the environment has a native FormData implementation
+		return typeof FormData === 'function';
+	});
 
-			response.status = _xhr.status;
-			if(response.options.handleAs == 'xml'){
-				response.data = _xhr.responseXML;
-			}else{
-				response.text = _xhr.responseText;
+	function handleResponse(response, error){
+		var _xhr = response.xhr;
+		response.status = response.xhr.status;
+		response.text = _xhr.responseText;
+
+		if(response.options.handleAs === 'xml'){
+			response.data = _xhr.responseXML;
+		}
+
+		if(!error){
+			try{
+				handlers(response);
+			}catch(e){
+				error = e;
 			}
-			dfd.reject(err);
+		}
+
+		if(error){
+			this.reject(error);
+		}else if(util.checkStatus(_xhr.status)){
+			this.resolve(response);
+		}else{
+			error = new RequestError('Unable to load ' + response.url + ' status: ' + _xhr.status, response);
+
+			this.reject(error);
 		}
 	}
 
-	var validCheck, ioCheck, resHandle, addListeners, cancel;
+	var isValid, isReady, addListeners, cancel;
 	if(has('native-xhr2')){
 		// Any platform with XHR2 will only use the watch mechanism for timeout.
 
-		validCheck = function(dfd, response){
-			// summary: Check to see if the request should be taken out of the watch queue
-			return !dfd._finished;
+		isValid = function(response){
+			// summary:
+			//		Check to see if the request should be taken out of the watch queue
+			return !this.isFulfilled();
 		};
 		cancel = function(dfd, response){
-			// summary: Canceler for deferred
+			// summary:
+			//		Canceler for deferred
 			response.xhr.abort();
 		};
 		addListeners = function(_xhr, dfd, response){
-			// summary: Adds event listeners to the XMLHttpRequest object
+			// summary:
+			//		Adds event listeners to the XMLHttpRequest object
 			function onLoad(evt){
-				dfd._finished = 1;
-				_resHandle(dfd, response);
+				dfd.handleResponse(response);
 			}
 			function onError(evt){
-				dfd._finished = 1;
-
-				var _xhr = evt.target,
-					err = new Error('Unable to load ' + response.url + ' status: ' + _xhr.status);
-				err.log = false;
-
-				response.status = _xhr.status;
-				if(response.options.handleAs == 'xml'){
-					response.data = _xhr.responseXML;
-				}else{
-					response.text = _xhr.responseText;
-				}
-				dfd.reject(err);
-			}
-			function onAbort(evt){
-				dfd._finished = 1;
+				var _xhr = evt.target;
+				var error = new RequestError('Unable to load ' + response.url + ' status: ' + _xhr.status, response); 
+				dfd.handleResponse(response, error);
 			}
 
 			function onProgress(evt){
@@ -81,51 +90,30 @@ define([
 
 			_xhr.addEventListener('load', onLoad, false);
 			_xhr.addEventListener('error', onError, false);
-			_xhr.addEventListener('abort', onAbort, false);
 			_xhr.addEventListener('progress', onProgress, false);
 
 			return function(){
 				_xhr.removeEventListener('load', onLoad, false);
 				_xhr.removeEventListener('error', onError, false);
-				_xhr.removeEventListener('abort', onAbort, false);
 				_xhr.removeEventListener('progress', onProgress, false);
 			};
 		};
 	}else{
-		validCheck = function(dfd, response){
+		isValid = function(response){
 			return response.xhr.readyState; //boolean
 		};
-		ioCheck = function(dfd, response){
-			return 4 == response.xhr.readyState; //boolean
+		isReady = function(response){
+			return 4 === response.xhr.readyState; //boolean
 		};
-		resHandle = _resHandle;
 		cancel = function(dfd, response){
-			// summary: canceller function for util.deferred call.
+			// summary:
+			//		canceller function for util.deferred call.
 			var xhr = response.xhr;
 			var _at = typeof xhr.abort;
-			if(_at == 'function' || _at == 'object' || _at == 'unknown'){
+			if(_at === 'function' || _at === 'object' || _at === 'unknown'){
 				xhr.abort();
 			}
 		};
-	}
-
-	function resolve(response){
-		// summary: okHandler function for util.deferred call.
-		var _xhr = response.xhr;
-		if(response.options.handleAs == 'xml'){
-			response.data = _xhr.responseXML;
-		}else{
-			response.text = _xhr.responseText;
-		}
-		response.status = response.xhr.status;
-		handlers(response);
-		return response;
-	}
-	function reject(error, response){
-		// summary: errHandler function for util.deferred call.
-		if(!response.options.failOk){
-			console.error(error);
-		}
 	}
 
 	var undefined,
@@ -138,31 +126,47 @@ define([
 				'Content-Type': 'application/x-www-form-urlencoded'
 			}
 		};
-	function xhr(/*String*/ url, /*Object?*/ options){
-		//	summary:
+	function xhr(/*String*/ url, /*Object?*/ options, /*Boolean?*/ returnDeferred){
+		// summary:
 		//		Sends an HTTP request with the given URL and options.
-		//	description:
+		// description:
 		//		Sends an HTTP request with the given URL.
-		//	url:
+		// url:
 		//		URL to request
-		var response = util.parseArgs(url, util.deepCreate(defaultOptions, options));
+		var response = util.parseArgs(
+			url,
+			util.deepCreate(defaultOptions, options),
+			has('native-formdata') && options.data && options.data instanceof FormData
+		);
 		url = response.url;
 		options = response.options;
 
 		var remover,
-			fnlly = function(){
+			last = function(){
 				remover && remover();
 			};
 
 		//Make the Deferred object for this xhr request.
-		var dfd = util.deferred(response, cancel, resolve, reject, fnlly),
-			_xhr = response.xhr = xhr._create();
+		var dfd = util.deferred(
+			response,
+			cancel,
+			isValid,
+			isReady,
+			handleResponse,
+			last
+		);
+		var _xhr = response.xhr = xhr._create();
 
-		//If XHR factory fails, cancel the deferred.
 		if(!_xhr){
-			dfd.cancel();
-			return dfd.promise;
+			// If XHR factory somehow returns nothings,
+			// cancel the deferred.
+			dfd.cancel(new RequestError('XHR was not created'));
+			return returnDeferred ? dfd : dfd.promise;
 		}
+
+		response.getHeader = function(headerName){
+			return this.xhr.getResponseHeader(headerName);
+		};
 
 		if(addListeners){
 			remover = addListeners(_xhr, dfd, response);
@@ -172,45 +176,48 @@ define([
 			async = !options.sync,
 			method = options.method;
 
-		// IE6 won't let you call apply() on the native function.
-		_xhr.open(method, url, async, options.user || undefined, options.password || undefined);
+		try{
+			// IE6 won't let you call apply() on the native function.
+			_xhr.open(method, url, async, options.user || undefined, options.password || undefined);
 
-		var headers = options.headers,
-			contentType;
-		if(headers){
-			for(var hdr in headers){
-				if(hdr.toLowerCase() == 'content-type'){
-					contentType = headers[hdr];
-				}else if(headers[hdr]){
-					//Only add header if it has a value. This allows for instance, skipping
-					//insertion of X-Requested-With by specifying empty value.
-					_xhr.setRequestHeader(hdr, headers[hdr]);
+			if(options.withCredentials){
+				_xhr.withCredentials = options.withCredentials;
+			}
+
+			var headers = options.headers,
+				contentType;
+			if(headers){
+				for(var hdr in headers){
+					if(hdr.toLowerCase() === 'content-type'){
+						contentType = headers[hdr];
+					}else if(headers[hdr]){
+						//Only add header if it has a value. This allows for instance, skipping
+						//insertion of X-Requested-With by specifying empty value.
+						_xhr.setRequestHeader(hdr, headers[hdr]);
+					}
 				}
 			}
-		}
 
-		if(contentType && contentType !== false){
-			_xhr.setRequestHeader('Content-Type', contentType);
-		}
-		if(!headers || !('X-Requested-With' in headers)){
-			_xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
-		}
+			if(contentType && contentType !== false){
+				_xhr.setRequestHeader('Content-Type', contentType);
+			}
+			if(!headers || !('X-Requested-With' in headers)){
+				_xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+			}
 
-		try{
-			var notify = require('./notify');
-			notify.send(response);
-		}catch(e){}
-		try{
+			try{
+				var notify = require('./notify');
+				notify.send(response);
+			}catch(e){}
 			_xhr.send(data);
 		}catch(e){
-			response.error = e;
 			dfd.reject(e);
 		}
 
-		watch(dfd, response, validCheck, ioCheck, resHandle);
+		watch(dfd);
 		_xhr = null;
 
-		return dfd.promise;
+		return returnDeferred ? dfd : dfd.promise;
 	}
 
 	xhr._create = function(){
@@ -218,7 +225,7 @@ define([
 		//		does the work of portably generating a new XMLHTTPRequest object.
 		throw new Error('XMLHTTP not available');
 	};
-	if(has('native-xhr')){
+	if(has('native-xhr') && !has('dojo-force-activex-xhr')){
 		xhr._create = function(){
 			return new XMLHttpRequest();
 		};

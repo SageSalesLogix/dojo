@@ -1,20 +1,17 @@
 define([
 	"../_base/array", "../_base/declare", "../_base/event", "../_base/lang", "../sniff", "../_base/window",
 	"../dom", "../dom-geometry", "../dom-style", "../Evented", "../on", "../touch", "./common", "./autoscroll"
-], function(array, declare, event, lang, has, win, dom, domGeom, domStyle, Evented, on, touch, dnd, autoscroll) {
+], function(array, declare, event, lang, has, win, dom, domGeom, domStyle, Evented, on, touch, dnd, autoscroll){
 
 // module:
 //		dojo/dnd/Mover
-// summary:
-//		TODOC
-
-/*===== Evented = dojo.Evented; =====*/
 
 return declare("dojo.dnd.Mover", [Evented], {
+	// summary:
+	//		an object which makes a node follow the mouse, or touch-drag on touch devices.
+	//		Used as a default mover, and as a base class for custom movers.
+
 	constructor: function(node, e, host){
-		// summary:
-		//		an object which makes a node follow the mouse, or touch-drag on touch devices.
-		//		Used as a default mover, and as a base class for custom movers.
 		// node: Node
 		//		a node (or node's id) to be moved
 		// e: Event
@@ -42,6 +39,10 @@ return declare("dojo.dnd.Mover", [Evented], {
 			on(d, "dragstart",   event.stop),
 			on(d.body, "selectstart", event.stop)
 		];
+
+		// Tell autoscroll that a drag is starting
+		autoscroll.autoScrollStart(d);
+
 		// notify that the move has started
 		if(h && h.onMoveStart){
 			h.onMoveStart(this);

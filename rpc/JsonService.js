@@ -1,26 +1,23 @@
 define([
 	"../_base/declare", "../_base/Deferred", "../_base/json", "../_base/lang", "../_base/xhr",
 	"./RpcService"
-], function(declare, Deferred, json, lang, xhr, RpcService) {
+], function(declare, Deferred, json, lang, xhr, RpcService){
 
-// module:
-//		dojo/rpc/JsonService
-// summary:
-//		TODOC
+	// module:
+	//		dojo/rpc/JsonService
 
-/*=====
-RpcService = dojo.rpc.RpcService;
-=====*/
+	return declare("dojo.rpc.JsonService", RpcService, {
+		// summary:
+		//		TODOC
 
-return declare("dojo.rpc.JsonService", RpcService, {
 		bustCache: false,
 		contentType: "application/json-rpc",
 		lastSubmissionId: 0,
 
 		callRemote: function(method, params){
 			// summary:
-			// 		call an arbitrary remote method without requiring it to be
-			// 		predefined with SMD
+			//		call an arbitrary remote method without requiring it to be
+			//		predefined with SMD
 			// method: string
 			//		the name of the remote method you want to call.
 			// params: array
@@ -85,7 +82,6 @@ return declare("dojo.rpc.JsonService", RpcService, {
 			}
 			return obj;
 		}
-	}
-);
+	});
 
 });

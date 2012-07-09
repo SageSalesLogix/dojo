@@ -1,18 +1,24 @@
-define(["../_base/lang", "../_base/declare", "../_base/Deferred", "../_base/array", "./util/QueryResults", "./util/SimpleQueryEngine"
-], function(lang,declare,Deferred,array,QueryResults, SimpleQueryEngine) {
-	// module:
-	//		dojo/store/DataStore
+define([
+	"../_base/lang", "../_base/declare", "../_base/Deferred", "../_base/array",
+	"./util/QueryResults", "./util/SimpleQueryEngine" /*=====, "./api/Store" =====*/
+], function(lang, declare, Deferred, array, QueryResults, SimpleQueryEngine /*=====, Store =====*/){
+
+// module:
+//		dojo/store/DataStore
+
+
+// No base class, but for purposes of documentation, the base class is dojo/store/api/Store
+var base = null;
+/*===== base = Store; =====*/
+
+return declare("dojo.store.DataStore", base, {
 	// summary:
-	//		TODOC
+	//		This is an adapter for using Dojo Data stores with an object store consumer.
+	//		You can provide a Dojo data store and use this adapter to interact with it through
+	//		the Dojo object store API
 
-
-return declare("dojo.store.DataStore", null, {
 	target: "",
 	constructor: function(options){
-		// summary:
-		//		This is an adapter for using Dojo Data stores with an object store consumer.
-		//		You can provide a Dojo data store and use this adapter to interact with it through
-		//		the Dojo object store API
 		// options: Object?
 		//		This provides any configuration information that will be mixed into the store,
 		//		including a reference to the Dojo data store under the property "store".
@@ -163,7 +169,7 @@ return declare("dojo.store.DataStore", null, {
 		//		The query to use for retrieving objects from the store
 		// options: Object?
 		//		Optional options object as used by the underlying dojo.data Store.
-		// returns: dojo.store.util.QueryResults
+		// returns: Store.QueryResults
 		//		A query results object that can be used to iterate over results.
 		var fetchHandle;
 		var deferred = new Deferred(function(){ fetchHandle.abort && fetchHandle.abort(); });

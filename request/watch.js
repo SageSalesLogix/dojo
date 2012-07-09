@@ -1,9 +1,11 @@
 define([
 	'./util',
+	'../errors/RequestTimeoutError',
+	'../errors/CancelError',
 	'../_base/array',
 	'../has!host-browser?../_base/window:',
 	'../has!host-browser?dom-addeventlistener?:../on:'
-], function(util, array, win, on){
+], function(util, RequestTimeoutError, CancelError, array, win, on){
 	// avoid setting a timer per request. It degrades performance on IE
 	// something fierece if we don't use unified loops.
 	var _inFlightIntvl = null,
@@ -17,25 +19,22 @@ define([
 		var now = +(new Date);
 
 		// we need manual loop because we often modify _inFlight (and therefore 'i') while iterating
-		for(var i = 0, tif, dfd; i < _inFlight.length && (tif = _inFlight[i]); i++){
-			var response = tif.response,
+		for(var i = 0, dfd; i < _inFlight.length && (dfd = _inFlight[i]); i++){
+			var response = dfd.response,
 				options = response.options;
-			dfd = tif.dfd;
-			if(!dfd || dfd.canceled || (dfd.isCancelled && dfd.isCanceled()) || (tif.validCheck && !tif.validCheck(dfd, response))){
+			if((dfd.isCanceled && dfd.isCanceled()) || (dfd.isValid && !dfd.isValid(response))){
 				_inFlight.splice(i--, 1);
 				watch._onAction && watch._onAction();
-			}else if(tif.ioCheck && tif.ioCheck(dfd, response)){
+			}else if(dfd.isReady && dfd.isReady(response)){
 				_inFlight.splice(i--, 1);
-				tif.resHandle(dfd, response);
+				dfd.handleResponse(response);
 				watch._onAction && watch._onAction();
-			}else if(options.startTime){
+			}else if(dfd.startTime){
 				// did we timeout?
-				if(options.startTime + (options.timeout || 0) < now){
+				if(dfd.startTime + (options.timeout || 0) < now){
 					_inFlight.splice(i--, 1);
-					response.error = new Error('timeout exceeded');
-					response.error.dojoType = 'timeout';
-					//Cancel the request so the io module can do appropriate cleanup.
-					dfd.cancel();
+					// Cancel the request so the io module can do appropriate cleanup.
+					dfd.cancel(new RequestTimeoutError(response));
 					watch._onAction && watch._onAction();
 				}
 			}
@@ -49,7 +48,7 @@ define([
 		}
 	}
 
-	function watch(dfd, response, validCheck, ioCheck, resHandle){
+	function watch(dfd){
 		// summary:
 		//		Watches the io request represented by dfd to see if it completes.
 		// dfd: Deferred
@@ -65,24 +64,23 @@ define([
 		// resHandle: Function
 		//		Function used to process response. Gets the dfd
 		//		object as its only argument.
-		if(response.options.timeout){
-			response.options.startTime = +(new Date);
+		if(dfd.response.options.timeout){
+			dfd.startTime = +(new Date);
 		}
 
-		_inFlight.push({
-			dfd: dfd,
-			response: response,
-			validCheck: validCheck,
-			ioCheck: ioCheck,
-			resHandle: resHandle
-		});
+		if(dfd.isFulfilled()){
+			// bail out if the deferred is already fulfilled
+			return;
+		}
+
+		_inFlight.push(dfd);
 		if(!_inFlightIntvl){
 			_inFlightIntvl = setInterval(watchInFlight, 50);
 		}
 
 		// handle sync requests separately from async:
 		// http://bugs.dojotoolkit.org/ticket/8467
-		if(response.options.sync){
+		if(dfd.response.options.sync){
 			watchInFlight();
 		}
 	}
@@ -90,9 +88,9 @@ define([
 	watch.cancelAll = function cancelAll(){
 		//summary: Cancels all pending IO requests, regardless of IO type
 		try{
-			array.forEach(_inFlight, function(i){
+			array.forEach(_inFlight, function(dfd){
 				try{
-					i.dfd.cancel();
+					dfd.cancel(new CancelError('All requests canceled.'));
 				}catch(e){}
 			});
 		}catch(e){}

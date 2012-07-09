@@ -1,4 +1,4 @@
-define(["require"], function(require) {
+define(["require"], function(require){
 	// module:
 	//		dojo/has
 	// summary:
@@ -6,9 +6,9 @@ define(["require"], function(require) {
 	// description:
 	//		This module defines the has API as described by the project has.js with the following additional features:
 	//
-	//			* the has test cache is exposed at has.cache.
-	//			* the method has.add includes a forth parameter that controls whether or not existing tests are replaced
-	//			* the loader's has cache may be optionally copied into this module's has cahce.
+	//		- the has test cache is exposed at has.cache.
+	//		- the method has.add includes a forth parameter that controls whether or not existing tests are replaced
+	//		- the loader's has cache may be optionally copied into this module's has cahce.
 	//
 	//		This module adopted from https://github.com/phiggins42/has.js; thanks has.js team!
 
@@ -33,14 +33,14 @@ define(["require"], function(require) {
 			element = doc && doc.createElement("DiV"),
 			cache = {};
 
-		has = /*===== dojo.has= =====*/ function(name){
-			//	summary:
+		has = function(name){
+			// summary:
 			//		Return the current value of the named feature.
 			//
-			//	name: String|Integer
+			// name: String|Integer
 			//		The name (if a string) or identifier (if an integer) of the feature to test.
 			//
-			//	description:
+			// description:
 			//		Returns the value of the feature named by name. The feature must have been
 			//		previously added to the cache by has.add.
 
@@ -49,45 +49,40 @@ define(["require"], function(require) {
 
 		has.cache = cache;
 
-		has.add = /*====== dojo.has.add= ======*/ function(name, test, now, force){
+		has.add = function(name, test, now, force){
 			// summary:
-			//	 Register a new feature test for some named feature.
-			//
+			//	 	Register a new feature test for some named feature.
 			// name: String|Integer
-			//	 The name (if a string) or identifier (if an integer) of the feature to test.
-			//
+			//	 	The name (if a string) or identifier (if an integer) of the feature to test.
 			// test: Function
-			//	 A test function to register. If a function, queued for testing until actually
-			//	 needed. The test function should return a boolean indicating
-			//	 the presence of a feature or bug.
-			//
+			//		 A test function to register. If a function, queued for testing until actually
+			//		 needed. The test function should return a boolean indicating
+			//	 	the presence of a feature or bug.
 			// now: Boolean?
-			//	 Optional. Omit if `test` is not a function. Provides a way to immediately
-			//	 run the test and cache the result.
-			//
+			//		 Optional. Omit if `test` is not a function. Provides a way to immediately
+			//		 run the test and cache the result.
 			// force: Boolean?
-			//	 Optional. If the test already exists and force is truthy, then the existing
-			//	 test will be replaced; otherwise, add does not replace an existing test (that
-			//	 is, by default, the first test advice wins).
+			//	 	Optional. If the test already exists and force is truthy, then the existing
+			//	 	test will be replaced; otherwise, add does not replace an existing test (that
+			//	 	is, by default, the first test advice wins).
+			// example:
+			//		A redundant test, testFn with immediate execution:
+			//	|	has.add("javascript", function(){ return true; }, true);
 			//
 			// example:
-			//			A redundant test, testFn with immediate execution:
-			//	|				has.add("javascript", function(){ return true; }, true);
+			//		Again with the redundantness. You can do this in your tests, but we should
+			//		not be doing this in any internal has.js tests
+			//	|	has.add("javascript", true);
 			//
 			// example:
-			//			Again with the redundantness. You can do this in your tests, but we should
-			//			not be doing this in any internal has.js tests
-			//	|				has.add("javascript", true);
-			//
-			// example:
-			//			Three things are passed to the testFunction. `global`, `document`, and a generic element
-			//			from which to work your test should the need arise.
-			//	|				has.add("bug-byid", function(g, d, el){
-			//	|						// g	== global, typically window, yadda yadda
-			//	|						// d	== document object
-			//	|						// el == the generic element. a `has` element.
-			//	|						return false; // fake test, byid-when-form-has-name-matching-an-id is slightly longer
-			//	|				});
+			//		Three things are passed to the testFunction. `global`, `document`, and a generic element
+			//		from which to work your test should the need arise.
+			//	|	has.add("bug-byid", function(g, d, el){
+			//	|		// g	== global, typically window, yadda yadda
+			//	|		// d	== document object
+			//	|		// el == the generic element. a `has` element.
+			//	|		return false; // fake test, byid-when-form-has-name-matching-an-id is slightly longer
+			//	|	});
 
 			(typeof cache[name]=="undefined" || force) && (cache[name]= test);
 			return now && has(name);
@@ -103,30 +98,29 @@ define(["require"], function(require) {
 	}
 
 	if(has("host-browser")){
-		var agent = navigator.userAgent;
 		// Common application level tests
 		has.add("dom-addeventlistener", !!document.addEventListener);
 		has.add("touch", "ontouchstart" in document);
 		// I don't know if any of these tests are really correct, just a rough guess
 		has.add("device-width", screen.availWidth || innerWidth);
 
-		// Tests for DOMNode.attributes[] behavior
-		// dom-attributes-explicit - attributes[] only lists explicitly user specified attributes
-		// dom-attributes-specified-flag (IE8) - need to check attr.specified flag to skip attributes user didn't specify
-		// Otherwise, it's IE6-7. attributes[] will list hundreds of values, so need to do outerHTML to get attrs instead.
+		// Tests for DOMNode.attributes[] behavior:
+		//	 - dom-attributes-explicit - attributes[] only lists explicitly user specified attributes
+		//	 - dom-attributes-specified-flag (IE8) - need to check attr.specified flag to skip attributes user didn't specify
+		//	 - Otherwise, in IE6-7. attributes[] will list hundreds of values, so need to do outerHTML to get attrs instead.
 		var form = document.createElement("form");
 		has.add("dom-attributes-explicit", form.attributes.length == 0); // W3C
-		has.add("dom-attributes-specified-flag", form.attributes.length < 40);	// IE8
+		has.add("dom-attributes-specified-flag", form.attributes.length > 0 && form.attributes.length < 40);	// IE8
 	}
 
-	has.clearElement = /*===== dojo.has.clearElement= ======*/ function(element) {
+	has.clearElement = function(element){
 		// summary:
 		//	 Deletes the contents of the element passed to test functions.
 		element.innerHTML= "";
 		return element;
 	};
 
-	has.normalize = /*===== dojo.has.normalize= ======*/ function(id, toAbsMid){
+	has.normalize = function(id, toAbsMid){
 		// summary:
 		//	 Resolves id into a module id based on possibly-nested tenary expression that branches on has feature test value(s).
 		//
@@ -159,17 +153,14 @@ define(["require"], function(require) {
 		return id && toAbsMid(id);
 	};
 
-	has.load = /*===== dojo.has.load= ======*/ function(id, parentRequire, loaded){
+	has.load = function(id, parentRequire, loaded){
 		// summary:
-		//	 Conditional loading of AMD modules based on a has feature test value.
-		//
+		//		Conditional loading of AMD modules based on a has feature test value.
 		// id: String
-		//	 Gives the resolved module id to load.
-		//
+		//		Gives the resolved module id to load.
 		// parentRequire: Function
-		//	 The loader require function with respect to the module that contained the plugin resource in it's
-		//	 dependency list.
-		//
+		//		The loader require function with respect to the module that contained the plugin resource in it's
+		//		dependency list.
 		// loaded: Function
 		//	 Callback to loader that consumes result of plugin demand.
 
